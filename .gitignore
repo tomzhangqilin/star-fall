@@ -1,0 +1,13 @@
+# Server logs
+server.err.log
+server.out.log
+
+# Claude internal
+.claude/
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Node
+node_modules/
