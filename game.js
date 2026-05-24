@@ -62,6 +62,57 @@ TONE RULES:
 - Chinese chapter names and NPC names encouraged; dialogue can be bilingual
 - Vary NPC archetypes each round — never repeat the same character type`;
 
+// ─── Narrator Fallback Scenes (used when API fails) ────────
+const NARRATOR_FALLBACKS = [
+  { // 0: 森林 / 早期
+    prose: "翠叶森林在你脚下低语，腐土与鲜血的气息混杂在晨雾之中。你手背上的发光纹路已蔓延至手腕——星陨大陆的伤口找到了新的容器。树冠之间，一个声音突然响起。\n\n**伤兵·陈望**蜷缩在树根旁，用布条捂住腰侧的伤口。\n"前面有三条路，走中间那条的人……没有一个回来报信。"\n"右边有个老巫婆——她疯了，但她知道怪物的弱点。"",
+    choices: [
+      { id:"A", label:"向右，寻找那个巫婆", tone:"curious" },
+      { id:"B", label:"为他包扎，换取情报", tone:"merciful" },
+      { id:"C", label:"无视他，直冲前方", tone:"aggressive" }
+    ]
+  },
+  { // 1: 沼泽
+    prose: "雾眠沼泽的水面平静得令人不安，每一步都可能踩空。你腕间的腐化纹路倒映在水中，引来了水面之下的注目——那些眼睛一眨不眨。\n\n**渔夫·沼泽李**坐在朽木上，手握一串鱼骨符咒，头也不抬。\n"今天的雾是有目的的，你能感觉到吗？"\n"那些东西不怕刀，但怕声音……大声的声音能让它们退缩片刻。"",
+    choices: [
+      { id:"A", label:"买下他的鱼骨符咒", tone:"cautious" },
+      { id:"B", label:"坐下，听他细说", tone:"curious" },
+      { id:"C", label:"抢走符咒，立刻离开", tone:"aggressive" }
+    ]
+  },
+  { // 2: 遗迹
+    prose: "赤砂遗迹的石柱在热浪中颤抖，你的影子拉得比太阳允许的更长。进化已经开始扭曲你与光的关系。废墟深处，某样东西在有规律地敲击——不像野兽，更像倒计时。\n\n一个**小女孩**坐在碎裂的石像旁，手里捏着一枚发光的琥珀。\n"叔叔，你的眼睛会发光。"\n"那些怪兽绕着石柱转……站在石柱旁边，它们就不会包围你。"",
+    choices: [
+      { id:"A", label:"收下琥珀，带她离开", tone:"merciful" },
+      { id:"B", label:"问她关于敌人的细节", tone:"curious" },
+      { id:"C", label:"点头离开，全力冲击", tone:"aggressive" }
+    ]
+  },
+  { // 3: Boss前
+    prose: "空气在此刻凝固。你能感觉到它——不是声音，是一种压力，像整片大陆正在屏住呼吸，等待某件不可避免之事的降临。你腐化的肌肉开始颤抖，不是因为恐惧，而是因为共鸣。\n\n一名**古战场幽魂**从地面升起，战甲已成灰烬，眼眶空洞却有光。\n"它……已经感知到你了。"\n"强者不是无惧死亡的人……是死亡也不愿轻易收走的人。做好准备。"",
+    choices: [
+      { id:"A", label:"以暴制暴，正面迎击", tone:"aggressive" },
+      { id:"B", label:"请他讲述Boss的弱点", tone:"curious" },
+      { id:"C", label:"沉默，让意识平静", tone:"cautious" }
+    ]
+  },
+  { // 4: 高波次
+    prose: "你已经走得太远，远到这片大陆开始把你当作一部分来接受。你的伤口愈合得太快，你的眼睛在黑暗中发光，你杀死敌人时心跳甚至没有加速。这不正常。\n\n**腐化商人·零**从阴影中踱出，面具后面看不到表情。\n"又一个走到这里的人。你比上一个撑得更久。"\n"前面的怪物已经进化了——它们在适应你，就像你在适应它们。"",
+    choices: [
+      { id:"A", label:"买下他的强化药剂", tone:"cautious" },
+      { id:"B", label:"威胁他说出更多", tone:"aggressive" },
+      { id:"C", label:"问他上一个人的命运", tone:"curious" }
+    ]
+  }
+];
+
+const NARRATOR_FALLBACK_CONSEQUENCES = {
+  aggressive: "你的怒意像淬火的刀刃，切断了所有犹豫。肌肉绷紧，血液开始沸腾——愤怒是这片大陆上最纯粹的燃料。\n\n本回合攻击力提升，但代价由你的身体承担。",
+  cautious:   "你深吸一口气，让意识沉入骨髓。环境开始变得清晰——每一块石头，每一处阴影，都成了你的盟友。\n\n体力得到恢复，你以最佳状态进入战场。",
+  merciful:   "你的善意在这个腐化的世界里显得格格不入，但正是这种违和感让对方选择信任你。他悄声指了指敌人的侧翼，给了你一个机会。\n\n信息就是力量——现在你比敌人多知道一件事。",
+  curious:    "你停下脚步，让大脑收集所有细节。某种规律开始浮现：敌人的移动轨迹，Boss的呼吸节律，一切都有迹可循。\n\n洞察力已激活——战场上的情报向你流动。"
+};
+
 // ─── Narrator State ────────────────────────────────────────
 let _narratorSkipped = false;
 let _narratorActive  = false;
@@ -188,27 +239,39 @@ async function runNarratorScene(onDone) {
     onDone();
   };
 
-  // Turn 1: get narration + choices
+  // Pick fallback scene (cycle by round, bias toward boss scene on boss rounds)
+  const isBoss = state.round % state.shopEvery === 0;
+  const fbIdx  = isBoss ? 3 : (state.round % 3);
+  const fallback = NARRATOR_FALLBACKS[fbIdx] || NARRATOR_FALLBACKS[0];
+
+  // Turn 1: try AI, fall back to pre-written scene
   const messages = [{ role: 'user', content: userMsg }];
   let firstResponse = '';
+  let usingFallback = false;
   try {
     firstResponse = await _narratorAPICall(messages);
   } catch(e) {
-    overlay.style.display = 'none';
-    _narratorActive = false;
-    onDone();
-    return;
+    usingFallback = true;
   }
   if (_narratorSkipped) return;
 
-  // Parse
-  const choicesTag  = firstResponse.match(/<choices>([\s\S]*?)<\/choices>/);
-  const narratorText= choicesTag
-    ? firstResponse.slice(0, firstResponse.indexOf('<choices>')).trim()
-    : firstResponse.trim();
-  let parsedChoices = [];
-  if (choicesTag) {
-    try { parsedChoices = JSON.parse(choicesTag[1].trim()); } catch(e) {}
+  // Parse AI response (or use fallback)
+  let narratorText, parsedChoices;
+  if (!usingFallback) {
+    const choicesTag = firstResponse.match(/<choices>([\s\S]*?)<\/choices>/);
+    narratorText  = choicesTag
+      ? firstResponse.slice(0, firstResponse.indexOf('<choices>')).trim()
+      : firstResponse.trim();
+    parsedChoices = [];
+    if (choicesTag) {
+      try { parsedChoices = JSON.parse(choicesTag[1].trim()); } catch(e) {}
+    }
+    // If parse failed or no choices returned, fall back
+    if (!parsedChoices.length) usingFallback = true;
+  }
+  if (usingFallback) {
+    narratorText  = fallback.prose;
+    parsedChoices = fallback.choices;
   }
 
   // Typewriter narration
@@ -216,46 +279,48 @@ async function runNarratorScene(onDone) {
   await typewriterReveal(prose, narratorText, 18);
   if (_narratorSkipped) return;
 
-  if (!parsedChoices.length) {
-    // No choices: brief pause then start
-    await new Promise(r => setTimeout(r, 2200));
-    if (_narratorSkipped) return;
-    overlay.style.display = 'none';
-    _narratorActive = false;
-    onDone();
-    return;
-  }
-
   // Show choice buttons
   statusEl.textContent = '做出你的选择——';
   choicesEl.style.display = 'flex';
-  parsedChoices.forEach(ch => {
+  parsedChoices.forEach(choice => {
     const btn = document.createElement('button');
-    btn.className = `narr-choice-btn tone-${ch.tone}`;
-    btn.innerHTML = `<span class="narr-choice-id">${ch.id}</span><span>${ch.label}</span>`;
+    btn.className = `narr-choice-btn tone-${choice.tone}`;
+    btn.innerHTML = `<span class="narr-choice-id">${choice.id}</span><span>${choice.label}</span>`;
     btn.onclick = async () => {
       if (_narratorSkipped) return;
       choicesEl.querySelectorAll('button').forEach(b => b.disabled = true);
       statusEl.textContent = '命运正在回应…';
 
-      // Turn 2: consequence + modifier
-      messages.push({ role: 'assistant', content: firstResponse });
-      messages.push({ role: 'user', content: ch.id });
-      let secondResponse = '';
-      try {
-        secondResponse = await _narratorAPICall(messages);
-      } catch(e) { secondResponse = ''; }
-      if (_narratorSkipped) return;
+      let conText = '';
+      let modType = choice.tone;
 
-      // Parse modifier
-      const modMatch = secondResponse.match(/<modifier\s+type="(\w+)"\s+value="([^"]*)"\s+description="([^"]*)"\s*\/>/);
-      if (modMatch) applyNarratorModifier(modMatch[1], modMatch[2], modMatch[3]);
+      if (!usingFallback) {
+        // Turn 2: consequence + modifier via AI
+        messages.push({ role: 'assistant', content: firstResponse });
+        messages.push({ role: 'user', content: choice.id });
+        let secondResponse = '';
+        try {
+          secondResponse = await _narratorAPICall(messages);
+        } catch(e) { secondResponse = ''; }
+        if (_narratorSkipped) return;
 
-      // Parse consequence text (strip XML tags)
-      const conText = secondResponse
-        .replace(/<modifier[^>]*\/>/g, '')
-        .replace(/<begin_combat\/>/g, '')
-        .trim();
+        const modMatch = secondResponse.match(/<modifier\s+type="(\w+)"\s+value="([^"]*)"\s+description="([^"]*)"\s*\/>/);
+        if (modMatch) {
+          applyNarratorModifier(modMatch[1], modMatch[2], modMatch[3]);
+          modType = modMatch[1];
+        } else {
+          applyNarratorModifier(choice.tone, '1', NARRATOR_FALLBACK_CONSEQUENCES[choice.tone]?.split('\n')[0] || '');
+        }
+        conText = secondResponse
+          .replace(/<modifier[^>]*\/>/g, '')
+          .replace(/<begin_combat\/>/g, '')
+          .trim();
+        if (!conText) conText = NARRATOR_FALLBACK_CONSEQUENCES[choice.tone] || '';
+      } else {
+        // Fallback consequence
+        applyNarratorModifier(choice.tone, '1', NARRATOR_FALLBACK_CONSEQUENCES[choice.tone]?.split('\n')[0] || '');
+        conText = NARRATOR_FALLBACK_CONSEQUENCES[choice.tone] || '';
+      }
 
       choicesEl.style.display = 'none';
       conEl.style.display     = 'block';
@@ -263,7 +328,6 @@ async function runNarratorScene(onDone) {
       await typewriterReveal(conEl, conText, 22);
       if (_narratorSkipped) return;
 
-      // Wait then start combat
       await new Promise(r => setTimeout(r, 1800));
       if (_narratorSkipped) return;
       overlay.style.display = 'none';
