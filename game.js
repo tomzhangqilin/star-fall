@@ -1391,6 +1391,104 @@ const SPRITE_DEFS = {
 // ─── Sound Effects (Web Audio API — procedural, no files) ──
 let _sfxCtx = null;
 let _sfxMuted = false;
+let _audioUnlocked = false;
+let _musicMode = "menu";
+const AUDIO_ASSETS = {
+  menu: "assets/audio/main-page.mp3",
+  game: "assets/audio/game-background.mp3",
+  shoot: "assets/audio/gun-shot.mp3",
+  sword: "assets/audio/sword-swing.mp3",
+  hit: "assets/audio/sword-hit.mp3",
+  spell: "assets/audio/spell-cast.mp3",
+  hurt: "assets/audio/hurt.mp3"
+};
+const AUDIO_EVENT_ASSET = {
+  shoot: "shoot",
+  hit: "hit",
+  playerHurt: "hurt",
+  dash: "spell",
+  bossRoar: "spell",
+  spell: "spell",
+  sword: "sword"
+};
+const AUDIO_VOLUMES = {
+  menu: 0.42,
+  game: 0.34,
+  shoot: 0.34,
+  sword: 0.42,
+  hit: 0.38,
+  spell: 0.36,
+  hurt: 0.48
+};
+const _audioPools = {};
+const _musicTracks = {};
+
+function getAudioClip(key) {
+  const src = AUDIO_ASSETS[key];
+  if (!src) return null;
+  const pool = _audioPools[key] || (_audioPools[key] = []);
+  let clip = pool.find(a => a.paused || a.ended);
+  if (!clip && pool.length < 6) {
+    clip = new Audio(src);
+    clip.preload = "auto";
+    pool.push(clip);
+  }
+  return clip || pool[0] || null;
+}
+
+function playAudioAsset(type) {
+  if (_sfxMuted) return true;
+  const key = AUDIO_EVENT_ASSET[type];
+  const clip = getAudioClip(key);
+  if (!clip) return false;
+  try {
+    clip.pause();
+    clip.currentTime = 0;
+    clip.volume = AUDIO_VOLUMES[key] ?? 0.35;
+    const played = clip.play();
+    if (played?.catch) played.catch(() => {});
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+function getMusicTrack(mode) {
+  const src = AUDIO_ASSETS[mode];
+  if (!src) return null;
+  if (!_musicTracks[mode]) {
+    const track = new Audio(src);
+    track.loop = true;
+    track.preload = "auto";
+    track.volume = AUDIO_VOLUMES[mode] ?? 0.35;
+    _musicTracks[mode] = track;
+  }
+  return _musicTracks[mode];
+}
+
+function setMusicMode(mode) {
+  _musicMode = mode;
+  for (const [name, track] of Object.entries(_musicTracks)) {
+    if (name !== mode) track.pause();
+  }
+  if (_sfxMuted || !mode || !_audioUnlocked) return;
+  const track = getMusicTrack(mode);
+  if (!track) return;
+  track.volume = AUDIO_VOLUMES[mode] ?? 0.35;
+  const played = track.play();
+  if (played?.catch) played.catch(() => {});
+}
+
+function unlockGameAudio() {
+  _audioUnlocked = true;
+  const ac = getSfxCtx();
+  if (ac?.state === "suspended") ac.resume().catch(() => {});
+  for (const key of Object.keys(AUDIO_ASSETS)) getAudioClip(key);
+  setMusicMode(_musicMode);
+}
+
+document.addEventListener("pointerdown", unlockGameAudio, { once:true });
+document.addEventListener("keydown", unlockGameAudio, { once:true });
 
 function getSfxCtx() {
   if (!_sfxCtx) {
@@ -1402,6 +1500,7 @@ function getSfxCtx() {
 
 function playSound(type) {
   if (_sfxMuted) return;
+  if (playAudioAsset(type)) return;
   const ac = getSfxCtx();
   if (!ac) return;
   try {
@@ -3346,6 +3445,7 @@ function drawStablePlayer(p) {
 //  GAME LOGIC
 // ═══════════════════════════════════════════════════════════
 function startGame() {
+  setMusicMode("game");
   state = baseState(selectedClass);
 
   // ── Apply menu shop purchases (no float text during init) ──
@@ -3384,6 +3484,7 @@ function startGame() {
 
 // ── Return to main menu after death / restart ───────────────
 function resetToMenu() {
+  setMusicMode("menu");
   // Carry over any unspent in-game coins to the persistent wallet
   const earned = Math.round(state?.coins || 0);
   if (earned > 0) _saveWallet(_loadWallet() + earned);
@@ -3666,6 +3767,7 @@ function nearestEnemy() {
 
 function meleeSwing(target) {
   const p = state.player;
+  playSound('sword');
   const baseAngle = Math.atan2(target.y - p.y, target.x - p.x);
   const range = p.traits.meleeRange || 110;
   const arc   = p.traits.meleeArc   || 1.1;
@@ -3780,6 +3882,7 @@ function useSkillQ() {
   const sk = state.skills.q;
   if (sk.cd > 0) return;
   sk.cd = sk.maxCd;
+  playSound('spell');
   if (state.classId === 'duelist')     shadowDash();
   else if (state.classId === 'tank')   earthbreaker();
   else if (state.classId === 'mage')   corruptionOrb();
@@ -3790,6 +3893,7 @@ function useSkillE() {
   const sk = state.skills.e;
   if (sk.cd > 0) return;
   sk.cd = sk.maxCd;
+  playSound('spell');
   if (state.classId === 'duelist')     activatePhantomHunt();
   else if (state.classId === 'tank')   activateIronGuardian();
   else if (state.classId === 'mage')   activateAbyssRitual();
@@ -8230,6 +8334,7 @@ function updateUi() {
 
 function endGame(win) {
   if (state.over) return;
+  setMusicMode("menu");
   state.over = true; state.running = false; paused = true;
   // 短暂延迟后显示死亡人格卡
   setTimeout(showDeathCard, win ? 400 : 1200);
