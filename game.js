@@ -283,25 +283,25 @@ const STAGES = [
 const STAGE_CONFIG = [
   null, // index 0 — unused
   // Stage 1 — 翠叶试炼  (boss target: Normal≈95  Archer≈78  Elite≈88  Boss=70)
-  // Enemies: slime hordes + flying eyes + ogre elites
+  // Enemies: slime hordes + flying eyes + ogre elites | Boss: armored knight
   { sb:1.0, dmgTier:1.0, bossHp:2400,  normalBase:[73, 93],  archerBase:64,  eliteBase:74,  bossBase:58,
-    normalSprite:'slime',  archerSprite:'eye',    eliteSprite:'ogre'   },
+    normalSprite:'slime',  archerSprite:'eye',    eliteSprite:'ogre',   bossSprite:'freeknight' },
   // Stage 2 — 暗林深处  (boss target: Normal≈108 Archer≈92  Elite≈102 Boss=88)
-  // Enemies: hounds prowl + flying eyes + ogre elites
+  // Enemies: hounds prowl + flying eyes + ogre elites | Boss: dragon
   { sb:1.5, dmgTier:1.3, bossHp:4680,  normalBase:[78, 98],  archerBase:74,  eliteBase:84,  bossBase:70,
-    normalSprite:'hound',  archerSprite:'eye',    eliteSprite:'ogre'   },
+    normalSprite:'hound',  archerSprite:'eye',    eliteSprite:'ogre',   bossSprite:'dragon'     },
   // Stage 3 — 赤砂遗迹  (boss target: Normal≈122 Archer≈108 Elite≈118 Boss=110)
-  // Enemies: hounds + wizard archers + ogre elites
+  // Enemies: hounds + wizard archers + ogre elites | Boss: armored knight
   { sb:2.2, dmgTier:1.7, bossHp:8976,  normalBase:[86, 106], archerBase:84,  eliteBase:94,  bossBase:86,
-    normalSprite:'hound',  archerSprite:'wizard', eliteSprite:'ogre'   },
+    normalSprite:'hound',  archerSprite:'wizard', eliteSprite:'ogre',   bossSprite:'freeknight' },
   // Stage 4 — 霜月城垣  (boss target: Normal≈140 Archer≈128 Elite≈138 Boss=138)
-  // Enemies: human soldiers + flying sentinels + terrible knights
+  // Enemies: human soldiers + flying sentinels + terrible knights | Boss: dragon
   { sb:3.2, dmgTier:2.3, bossHp:17664, normalBase:[100,120], archerBase:98,  eliteBase:108, bossBase:108,
-    normalSprite:'hero',   archerSprite:'eye',    eliteSprite:'knight' },
+    normalSprite:'hero',   archerSprite:'eye',    eliteSprite:'knight', bossSprite:'dragon'     },
   // Stage 5 — 星裂深渊  (boss target: Normal≈162 Archer≈152 Elite≈162 Boss=172)
-  // Enemies: abyss eyes + void wizards + knight elites
+  // Enemies: abyss eyes + void wizards + knight elites | Boss: armored knight (final form)
   { sb:4.5, dmgTier:3.0, bossHp:32400, normalBase:[114,134], archerBase:116, eliteBase:126, bossBase:136,
-    normalSprite:'eye',    archerSprite:'wizard', eliteSprite:'knight' },
+    normalSprite:'eye',    archerSprite:'wizard', eliteSprite:'knight', bossSprite:'freeknight' },
 ];
 
 let _stageMode   = false;   // true = stage mode, false = infinite mode
@@ -850,8 +850,133 @@ const SPRITE_DEFS = {
   slime: {   // Stage 1 Normal — Monster Slime
     base: 'sprites/Monster_Slime/No_Shadows/Monster_Slime',
     frames: { Idle:4, Walk:8, Attack1:4 }
+  },
+  freeknight: { // Stage boss — Free Knight (120×80/frame)
+    base: 'sprites/freeknight',
+    frames: { Idle:10, Walk:10, Attack1:4, Attack2:6, Death:10 },
+    files:  { Idle:'_Idle', Walk:'_Run', Attack1:'_Attack', Attack2:'_Attack2', Death:'_Death' }
   }
 };
+
+// ─── Sound Effects (Web Audio API — procedural, no files) ──
+let _sfxCtx = null;
+let _sfxMuted = false;
+
+function getSfxCtx() {
+  if (!_sfxCtx) {
+    try { _sfxCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e) { return null; }
+  }
+  return _sfxCtx;
+}
+
+function playSound(type) {
+  if (_sfxMuted) return;
+  const ac = getSfxCtx();
+  if (!ac) return;
+  try {
+    const t = ac.currentTime;
+    switch (type) {
+      case 'shoot': {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'square'; o.connect(g); g.connect(ac.destination);
+        o.frequency.setValueAtTime(520, t);
+        o.frequency.exponentialRampToValueAtTime(90, t + 0.07);
+        g.gain.setValueAtTime(0.07, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+        o.start(t); o.stop(t + 0.08); break;
+      }
+      case 'hit': {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sawtooth'; o.connect(g); g.connect(ac.destination);
+        o.frequency.setValueAtTime(900, t);
+        o.frequency.exponentialRampToValueAtTime(180, t + 0.07);
+        g.gain.setValueAtTime(0.18, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+        o.start(t); o.stop(t + 0.09); break;
+      }
+      case 'playerHurt': {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sawtooth'; o.connect(g); g.connect(ac.destination);
+        o.frequency.setValueAtTime(180, t);
+        o.frequency.exponentialRampToValueAtTime(55, t + 0.18);
+        g.gain.setValueAtTime(0.35, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+        o.start(t); o.stop(t + 0.2); break;
+      }
+      case 'enemyDeath': {
+        // white-noise pop
+        const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.08), ac.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+        const src = ac.createBufferSource(), g = ac.createGain();
+        const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 500;
+        src.buffer = buf; src.connect(f); f.connect(g); g.connect(ac.destination);
+        g.gain.value = 0.22; src.start(t); break;
+      }
+      case 'eliteDeath': {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'triangle'; o.connect(g); g.connect(ac.destination);
+        o.frequency.setValueAtTime(300, t);
+        o.frequency.exponentialRampToValueAtTime(60, t + 0.22);
+        g.gain.setValueAtTime(0.28, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+        o.start(t); o.stop(t + 0.25); break;
+      }
+      case 'bossDeath': {
+        for (let i = 0; i < 4; i++) setTimeout(() => {
+          if (!ac) return;
+          const ct = ac.currentTime;
+          const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.35), ac.sampleRate);
+          const d = buf.getChannelData(0);
+          for (let j = 0; j < d.length; j++) d[j] = (Math.random()*2-1) * Math.pow(1 - j/d.length, 0.4);
+          const src = ac.createBufferSource(), g = ac.createGain();
+          const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 160;
+          src.buffer = buf; src.connect(f); f.connect(g); g.connect(ac.destination);
+          g.gain.value = 0.5; src.start(ct);
+        }, i * 120); break;
+      }
+      case 'coin': {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sine'; o.connect(g); g.connect(ac.destination);
+        o.frequency.setValueAtTime(1100, t);
+        o.frequency.exponentialRampToValueAtTime(1650, t + 0.05);
+        g.gain.setValueAtTime(0.12, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+        o.start(t); o.stop(t + 0.22); break;
+      }
+      case 'levelUp': {
+        [523, 659, 784, 1047].forEach((freq, i) => setTimeout(() => {
+          if (!ac) return; const ct = ac.currentTime;
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.type = 'sine'; o.connect(g); g.connect(ac.destination);
+          o.frequency.value = freq;
+          g.gain.setValueAtTime(0.18, ct);
+          g.gain.exponentialRampToValueAtTime(0.001, ct + 0.18);
+          o.start(ct); o.stop(ct + 0.18);
+        }, i * 75)); break;
+      }
+      case 'dash': {
+        const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.11), ac.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1) * (1 - i/d.length);
+        const src = ac.createBufferSource(), g = ac.createGain();
+        const f = ac.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 1200;
+        src.buffer = buf; src.connect(f); f.connect(g); g.connect(ac.destination);
+        g.gain.value = 0.28; src.start(t); break;
+      }
+      case 'bossRoar': {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sawtooth'; o.connect(g); g.connect(ac.destination);
+        o.frequency.setValueAtTime(60, t);
+        o.frequency.exponentialRampToValueAtTime(35, t + 0.6);
+        g.gain.setValueAtTime(0.5, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+        o.start(t); o.stop(t + 0.7); break;
+      }
+    }
+  } catch(e) {}
+}
 
 // Per-sprite enemy rendering config (size px, y-offset, HP bar colour)
 const ENEMY_SPRITE_INFO = {
@@ -1533,7 +1658,11 @@ function drawEnemy(enemy, chapter) {
   if (enemy.kind === 'boss') {
     const _bAnim  = enemy.anim?.attackFlash > 0 ? 'Attack1' : 'Idle';
     const _bFrame = enemy.anim?.frame || 0;
-    if (spritesReady && drawSprite('dragon', _bAnim, _bFrame, 0, 20, 220, false, 1)) {
+    // Per-stage boss sprite (freeknight or dragon)
+    const _bKey   = enemy.spriteKey || 'dragon';
+    const _bSize  = _bKey === 'freeknight' ? 240 : 220;
+    const _bYOff  = _bKey === 'freeknight' ? 0   : 20;
+    if (spritesReady && drawSprite(_bKey, _bAnim, _bFrame, 0, _bYOff, _bSize, false, 1)) {
       ctx.restore();
       const bw = enemy.r * 3.5;
       drawTinyHpBar(enemy.x, sy - enemy.r * 2.4, bw, hpPct, '#c6423d');
@@ -2933,8 +3062,8 @@ function spawnEnemy(kind = "normal") {
   const finalHp = Math.round(baseHp * hpMul);
   const shieldBase = Math.round((80 + state.wave * 4) * sb);
 
-  // Sprite key per-stage (boss always uses dragon)
-  const spriteKey = boss   ? null
+  // Sprite key per-stage
+  const spriteKey = boss   ? (stageCfg?.bossSprite   || 'dragon')
     : elite  ? (stageCfg?.eliteSprite  || 'ogre')
     : archer ? (stageCfg?.archerSprite || 'eye')
     :           (stageCfg?.normalSprite || 'hound');
@@ -3051,6 +3180,7 @@ function roll() {
     p.rollTime = berserkDash ? 0.36 : 0.28;
     if (state.tracker) state.tracker.dashCount++;
     p.invuln   = 0.48;
+    playSound('dash');
     burst(p.x, p.y, "#9df6ff", 14);
     if (p.traits.cloneDash) {
       state.afterimages.push({ x:p.x, y:p.y, z:p.z, life:0.75 });
@@ -4176,6 +4306,7 @@ function update(dt) {
   if (state.round % state.shopEvery === 0 && state.roundTime >= 24 && !state.bossSpawned) {
     state.bossSpawned = true;
     spawnEnemy("boss");
+    playSound('bossRoar');
     floatText(canvas.clientWidth/2, 110, "星裂守卫降临！", "#ff50a0");
     burst(canvas.clientWidth/2, canvas.clientHeight/2, "#ff50a0", 60);
   }
@@ -4278,7 +4409,7 @@ function movePlayer(dt) {
 
   if (p.fireCd <= 0) {
     const target = nearestEnemy();
-    if (target) { shoot(target); p.fireCd = p.fireRate; }
+    if (target) { shoot(target); p.fireCd = p.fireRate; playSound('shoot'); }
   }
 
   // Update player animation state
@@ -4948,6 +5079,7 @@ function updateEnemies(dt) {
         p.hp -= incoming;
         p.invuln = 0.35;
         if (incoming > 0) {
+          playSound('playerHurt');
           floatText(p.x, p.y-52, `-${incoming}`, "#ff4060");
           if (p.anim) p.anim.hurtFlash = 0.3;
         }
@@ -4985,6 +5117,7 @@ function updateBullets(dt) {
       if (enemy.infected) continue;
       if (distance(b, enemy) < enemy.r + b.r) {
         applyBulletHit(b, enemy);
+        playSound('hit');
         hit = true;
         burst(b.x, b.y, b.crit ? "#f0c868" : "#d8c8a0", b.crit?12:6);
         floatText(enemy.x, enemy.y-enemy.r-22, Math.round(b.damage), b.crit?"#ffcc44":"#eaf2ff");
@@ -5120,6 +5253,11 @@ function explodeAt(x, y, radius, damage, color, ignore=null) {
 }
 
 function killEnemy(enemy) {
+  // Sound on kill
+  if (enemy.kind === 'boss')        playSound('bossDeath');
+  else if (enemy.kind === 'elite')  playSound('eliteDeath');
+  else                               playSound('enemyDeath');
+
   state.kills += 1;
   if (state.roundStats) state.roundStats.kills++;
   const xp    = enemy.kind==="boss"?30:enemy.kind==="elite"?9:3;
@@ -5316,13 +5454,14 @@ function updatePickups(dt) {
     settleOnTerrain(item, dt, 10);
     if (d < p.r + item.r) {
       if (item.type === "xp") { p.xp += item.value; if (p.xp >= p.needXp) levelUp(); }
-      else state.coins += item.value;
+      else { state.coins += item.value; playSound('coin'); }
       state.pickups.splice(i, 1);
     }
   }
 }
 
 function levelUp() {
+  playSound('levelUp');
   const p = state.player;
   p.xp -= p.needXp;
   p.needXp = Math.round(p.needXp * 1.32 + 5);
