@@ -849,7 +849,7 @@ const SPRITE_DEFS = {
   },
   slime: {   // Stage 1 Normal — Monster Slime
     base: 'sprites/Monster_Slime/No_Shadows/Monster_Slime',
-    frames: { Idle:4, Walk:8, Attack1:4 }
+    frames: { Idle:4, Walk:8, Attack1:4, Hurt:4, Death:4 }
   },
   freeknight: { // Stage boss — Free Knight (120×80/frame)
     base: 'sprites/freeknight',
@@ -3062,11 +3062,27 @@ function spawnEnemy(kind = "normal") {
   const finalHp = Math.round(baseHp * hpMul);
   const shieldBase = Math.round((80 + state.wave * 4) * sb);
 
-  // Sprite key per-stage
-  const spriteKey = boss   ? (stageCfg?.bossSprite   || 'dragon')
-    : elite  ? (stageCfg?.eliteSprite  || 'ogre')
-    : archer ? (stageCfg?.archerSprite || 'eye')
-    :           (stageCfg?.normalSprite || 'hound');
+  // Sprite key — stage-mode uses STAGE_CONFIG, infinite mode rotates by wave tier
+  let spriteKey;
+  if (stageCfg) {
+    spriteKey = boss   ? (stageCfg.bossSprite   || 'dragon')
+              : elite  ? (stageCfg.eliteSprite  || 'ogre')
+              : archer ? (stageCfg.archerSprite || 'eye')
+              :           (stageCfg.normalSprite || 'hound');
+  } else {
+    // Infinite mode: vary sprites every 3 waves so enemies visually evolve
+    const wt = Math.floor(state.wave / 3); // 0,1,2,3...
+    if (boss) {
+      spriteKey = (wt % 2 === 0) ? 'dragon' : 'freeknight';
+    } else if (elite) {
+      spriteKey = (wt % 2 === 0) ? 'ogre' : 'knight';
+    } else if (archer) {
+      spriteKey = (wt % 2 === 0) ? 'eye' : 'wizard';
+    } else {
+      const normals = ['hound', 'slime', 'hero', 'hound'];
+      spriteKey = normals[wt % normals.length];
+    }
+  }
 
   state.enemies.push({
     ...pos, z:0,
