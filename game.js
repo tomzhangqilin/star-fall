@@ -321,13 +321,21 @@ function runNarratorScene(onDone) {
           statusEl.textContent = '';
           typewriterReveal(conEl, conText, 20).then(() => {
             if (_narratorSkipped) return;
-            window.setTimeout(() => {
+            statusEl.textContent = '';
+            // Spawn a manual "enter battle" button — player decides when to close
+            const enterBtn = document.createElement('button');
+            enterBtn.className = 'narr-enter-btn';
+            enterBtn.textContent = '⚔  进入战场';
+            const card = overlay.querySelector('.narr-card');
+            card.appendChild(enterBtn);
+            enterBtn.onclick = () => {
               if (_narratorSkipped) return;
+              card.removeChild(enterBtn);
               overlay.style.display = 'none';
               _narratorActive = false;
               _narratorAbort = null;
               onDone();
-            }, 1600);
+            };
           });
         };
 
@@ -2007,13 +2015,18 @@ function drawEnemy(enemy, chapter) {
   ctx.imageSmoothingEnabled = false;
 
   if (enemy.kind === 'boss') {
-    const _bAnim  = enemy.anim?.attackFlash > 0 ? 'Attack1' : 'Idle';
-    const _bFrame = enemy.anim?.frame || 0;
-    // Per-stage boss sprite (freeknight or dragon)
+    // Use anim.name directly (Walk/Attack1/Idle set by updateEnemies)
     const _bKey   = enemy.spriteKey || 'dragon';
+    const _bDef   = SPRITE_DEFS[_bKey];
+    let   _bAnim  = enemy.anim?.name || 'Idle';
+    // Graceful fallback: dragon has no Walk (uses Idle), freeknight has Walk
+    if (_bAnim === 'Walk' && !_bDef?.frames?.Walk) _bAnim = 'Idle';
+    if (_bAnim === 'Hurt' && !_bDef?.frames?.Hurt) _bAnim = 'Idle';
+    const _bFrame = enemy.anim?.frame || 0;
     const _bSize  = _bKey === 'freeknight' ? 240 : 220;
     const _bYOff  = _bKey === 'freeknight' ? 0   : 20;
-    if (spritesReady && drawSprite(_bKey, _bAnim, _bFrame, 0, _bYOff, _bSize, false, 1)) {
+    const _facing = enemy.facing === -1; // flip when facing left (toward player from right)
+    if (spritesReady && drawSprite(_bKey, _bAnim, _bFrame, 0, _bYOff, _bSize, _facing, 1)) {
       ctx.restore();
       const bw = enemy.r * 3.5;
       drawTinyHpBar(enemy.x, sy - enemy.r * 2.4, bw, hpPct, '#c6423d');
@@ -5264,6 +5277,19 @@ function startNextRound() {
 
   // Narrator scene → then boss pact (if needed) → then combat
   window.setTimeout(() => runNarratorScene(() => {
+    // Show prominent on-canvas modifier notification when combat begins
+    if (state.narratorMod) {
+      const _mc = { aggressive:'#ff6b6b', cautious:'#6bc4ff', merciful:'#6bff8f', curious:'#c08fff' };
+      const _mi = { aggressive:'⚔', cautious:'🛡', merciful:'💚', curious:'👁' };
+      const _col = _mc[state.narratorMod.type] || '#ffd080';
+      window.setTimeout(() => {
+        if (state.player) {
+          floatText(state.player.x, state.player.y - 80,
+            `${_mi[state.narratorMod.type] || '✦'} ${state.narratorMod.description}`,
+            _col, 4.5);
+        }
+      }, 400);
+    }
     if (isBossRound) {
       // Show pre-boss pact offer after narrator, then resume
       state.running = false;
@@ -5414,10 +5440,16 @@ function updateEnemies(dt) {
     // Update enemy sprite animation
     if (enemy.anim) {
       enemy.facing = state.player.x < enemy.x ? 1 : -1;
-      if (enemy.anim.hurtFlash > 0)    enemy.anim.name = 'Hurt';
-      else if (enemy.anim.attackFlash > 0) enemy.anim.name = 'Attack1';
-      else if (enemy.kind === 'boss')  enemy.anim.name = 'Idle';
-      else                              enemy.anim.name = 'Walk';
+      if (enemy.anim.hurtFlash > 0)         enemy.anim.name = 'Hurt';
+      else if (enemy.anim.attackFlash > 0)  enemy.anim.name = 'Attack1';
+      else if (enemy.kind === 'boss') {
+        // Boss: Walk when moving toward player, Idle when stopped
+        const _bdx = state.player.x - enemy.x, _bdy = state.player.y - enemy.y;
+        enemy.anim.name = (Math.abs(_bdx) + Math.abs(_bdy) > 8) ? 'Walk' : 'Idle';
+        enemy.anim.fps  = enemy.anim.name === 'Walk' ? 10 : 8;
+      } else {
+        enemy.anim.name = 'Walk';
+      }
       stepAnim(enemy.anim, dt);
     }
 
@@ -5426,7 +5458,7 @@ function updateEnemies(dt) {
     if (_pt && !_pt.downed && distance(_pt, enemy) < _pt.r + enemy.r * 0.9 &&
         distance(_pt, enemy) < distance(p, enemy) + 30 && enemy.attackCd <= 0 && Math.random() < 0.4) {
       enemy.attackCd = enemy.kind === "boss" ? 0.65 : 1.0;
-      if (enemy.anim) enemy.anim.attackFlash = 0.4;
+      if (enemy.anim) enemy.anim.attackFlash = enemy.kind === 'boss' ? 0.7 : 0.4;
       partnerTakeDamage(enemy.damage);
     }
     if (distance(p, enemy) < p.r*state.evolution.bodyScale + enemy.r*0.72 && enemy.attackCd <= 0) {
@@ -7961,6 +7993,8 @@ function updateUi() {
   const gameWrap = document.querySelector(".game-wrap");
   if (gameWrap) gameWrap.dataset.build = ev.dominant;
   updateRouteHud();
+  const _nmColors = { aggressive:'#ff6b6b', cautious:'#6bc4ff', merciful:'#6bff8f', curious:'#c08fff' };
+  const _nmIcons  = { aggressive:'⚔', cautious:'🛡', merciful:'💚', curious:'👁' };
   ui.stats.innerHTML = [
     `流派 ${p.className}`,
     `攻击 ${Math.round(p.damage)}`,
@@ -7972,7 +8006,8 @@ function updateUi() {
     `武器 ${state.ownedWeapons.length}`,
     `共鸣 ${Math.min(100,Math.round(p.petCharge))}%`,
     `体型 ${Math.round(ev.bodyScale*100)}%`
-  ].filter(Boolean).map(s=>`<span>${s}</span>`).join("");
+  ].filter(Boolean).map(s=>`<span>${s}</span>`).join("") +
+  (state.narratorMod ? `<span class="stat-narrator-mod" style="color:${_nmColors[state.narratorMod.type]||'#ffd080'}">${_nmIcons[state.narratorMod.type]||'✦'} ${state.narratorMod.description}</span>` : '');
 }
 
 function endGame(win) {
