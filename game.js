@@ -283,15 +283,25 @@ const STAGES = [
 const STAGE_CONFIG = [
   null, // index 0 — unused
   // Stage 1 — 翠叶试炼  (boss target: Normal≈95  Archer≈78  Elite≈88  Boss=70)
-  { sb:1.0, dmgTier:1.0, bossHp:2400,  normalBase:[73, 93],  archerBase:64,  eliteBase:74,  bossBase:58  },
+  // Enemies: slime hordes + flying eyes + ogre elites
+  { sb:1.0, dmgTier:1.0, bossHp:2400,  normalBase:[73, 93],  archerBase:64,  eliteBase:74,  bossBase:58,
+    normalSprite:'slime',  archerSprite:'eye',    eliteSprite:'ogre'   },
   // Stage 2 — 暗林深处  (boss target: Normal≈108 Archer≈92  Elite≈102 Boss=88)
-  { sb:1.5, dmgTier:1.3, bossHp:4680,  normalBase:[78, 98],  archerBase:74,  eliteBase:84,  bossBase:70  },
+  // Enemies: hounds prowl + flying eyes + ogre elites
+  { sb:1.5, dmgTier:1.3, bossHp:4680,  normalBase:[78, 98],  archerBase:74,  eliteBase:84,  bossBase:70,
+    normalSprite:'hound',  archerSprite:'eye',    eliteSprite:'ogre'   },
   // Stage 3 — 赤砂遗迹  (boss target: Normal≈122 Archer≈108 Elite≈118 Boss=110)
-  { sb:2.2, dmgTier:1.7, bossHp:8976,  normalBase:[86, 106], archerBase:84,  eliteBase:94,  bossBase:86  },
+  // Enemies: hounds + wizard archers + ogre elites
+  { sb:2.2, dmgTier:1.7, bossHp:8976,  normalBase:[86, 106], archerBase:84,  eliteBase:94,  bossBase:86,
+    normalSprite:'hound',  archerSprite:'wizard', eliteSprite:'ogre'   },
   // Stage 4 — 霜月城垣  (boss target: Normal≈140 Archer≈128 Elite≈138 Boss=138)
-  { sb:3.2, dmgTier:2.3, bossHp:17664, normalBase:[100,120], archerBase:98,  eliteBase:108, bossBase:108 },
+  // Enemies: human soldiers + flying sentinels + terrible knights
+  { sb:3.2, dmgTier:2.3, bossHp:17664, normalBase:[100,120], archerBase:98,  eliteBase:108, bossBase:108,
+    normalSprite:'hero',   archerSprite:'eye',    eliteSprite:'knight' },
   // Stage 5 — 星裂深渊  (boss target: Normal≈162 Archer≈152 Elite≈162 Boss=172)
-  { sb:4.5, dmgTier:3.0, bossHp:32400, normalBase:[114,134], archerBase:116, eliteBase:126, bossBase:136 },
+  // Enemies: abyss eyes + void wizards + knight elites
+  { sb:4.5, dmgTier:3.0, bossHp:32400, normalBase:[114,134], archerBase:116, eliteBase:126, bossBase:136,
+    normalSprite:'eye',    archerSprite:'wizard', eliteSprite:'knight' },
 ];
 
 let _stageMode   = false;   // true = stage mode, false = infinite mode
@@ -836,7 +846,22 @@ const SPRITE_DEFS = {
     base: 'sprites/dragon',
     frames: { Idle:6, Walk:6, Attack1:7 },
     files:  { Idle:'idle', Walk:'idle', Attack1:'breath' }
+  },
+  slime: {   // Stage 1 Normal — Monster Slime
+    base: 'sprites/Monster_Slime/No_Shadows/Monster_Slime',
+    frames: { Idle:4, Walk:8, Attack1:4 }
   }
+};
+
+// Per-sprite enemy rendering config (size px, y-offset, HP bar colour)
+const ENEMY_SPRITE_INFO = {
+  hound:  { size:150, yOff:10, hpColor:'#b84434' },
+  eye:    { size:120, yOff:8,  hpColor:'#8844cc' },
+  ogre:   { size:190, yOff:16, hpColor:'#d69a3a' },
+  slime:  { size: 90, yOff:4,  hpColor:'#54a832' },
+  wizard: { size:110, yOff:6,  hpColor:'#aa44cc' },
+  hero:   { size:150, yOff:10, hpColor:'#c87030' },
+  knight: { size:170, yOff:12, hpColor:'#505090' },
 };
 const SPRITES = {};
 let spritesReady = false;
@@ -1603,14 +1628,13 @@ function drawEnemy(enemy, chapter) {
   const _eAnim   = enemy.anim?.name || 'Walk';
   const _eFrame  = enemy.anim?.frame || 0;
 
-  // Pick sprite key + render size per kind
+  // Pick sprite key + render size per kind (stage-aware via enemy.spriteKey)
   let _eKey, _eSize, _eYOff, _hpColor;
-  if (enemy.kind === 'elite') {
-    _eKey = 'ogre';   _eSize = 190; _eYOff = 16; _hpColor = '#d69a3a';
-  } else if (enemy.kind === 'archer') {
-    _eKey = 'eye';    _eSize = 120; _eYOff = 8;  _hpColor = '#8844cc';
-  } else {
-    _eKey = 'hound';  _eSize = 150; _eYOff = 10; _hpColor = '#b84434';
+  {
+    const fallback = enemy.kind === 'elite' ? 'ogre' : enemy.kind === 'archer' ? 'eye' : 'hound';
+    _eKey = enemy.spriteKey || fallback;
+    const info = ENEMY_SPRITE_INFO[_eKey] || ENEMY_SPRITE_INFO[fallback];
+    _eSize = info.size; _eYOff = info.yOff; _hpColor = info.hpColor;
   }
 
   if (spritesReady && drawSprite(_eKey, _eAnim, _eFrame, 0, _eYOff, _eSize, _eFacing, 1)) {
@@ -2909,6 +2933,12 @@ function spawnEnemy(kind = "normal") {
   const finalHp = Math.round(baseHp * hpMul);
   const shieldBase = Math.round((80 + state.wave * 4) * sb);
 
+  // Sprite key per-stage (boss always uses dragon)
+  const spriteKey = boss   ? null
+    : elite  ? (stageCfg?.eliteSprite  || 'ogre')
+    : archer ? (stageCfg?.archerSprite || 'eye')
+    :           (stageCfg?.normalSprite || 'hound');
+
   state.enemies.push({
     ...pos, z:0,
     r:      boss?52 : elite?32 : 20,
@@ -2917,6 +2947,7 @@ function spawnEnemy(kind = "normal") {
     speed:  (speedBase + state.wave*3) * spMul,
     damage: Math.round(baseDmg * dmgTier) * dmMul,
     kind,
+    spriteKey,
     attackCd: 0,
     wobble: rand(0, Math.PI*2),
     cursedEnemy: cursed,
@@ -7622,6 +7653,8 @@ ui.restartBtn.addEventListener("click", resetToMenu);
 ui.nextRoundBtn.addEventListener("click", startNextRound);
 document.getElementById("routeConfirmBtn")?.addEventListener("click", confirmRouteSelection);
 document.getElementById("dcRestartBtn")?.addEventListener("click", resetToMenu);
+document.getElementById("dcMenuBtn")?.addEventListener("click", resetToMenu);
+document.getElementById("menuFromResultBtn")?.addEventListener("click", resetToMenu);
 document.getElementById("dcShareBtn")?.addEventListener("click", () => {
   // Canvas screenshot via existing game canvas
   const link = document.createElement("a");

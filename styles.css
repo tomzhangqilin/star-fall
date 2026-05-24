@@ -391,6 +391,18 @@ em.card-build {
   background: #309050;
   color: #c0ffd8;
 }
+#menuFromResultBtn {
+  background: rgba(30,40,80,0.6);
+  border-color: #404880;
+  color: #8090c0;
+  font-size: 13px;
+  font-weight: 700;
+}
+#menuFromResultBtn:hover {
+  background: rgba(50,60,110,0.8);
+  border-color: #6070b0;
+  color: #b0c8ff;
+}
 
 .shop-meta {
   display: flex;
@@ -1623,6 +1635,16 @@ em.card-build {
   background: rgba(130,50,210,0.55);
   border-color: #a060e8;
   color: #fff;
+}
+.dc-btn-menu {
+  background: rgba(20,30,60,0.4);
+  border-color: #304070;
+  color: #7080b0;
+}
+.dc-btn-menu:hover {
+  background: rgba(40,55,100,0.6);
+  border-color: #5068a0;
+  color: #a0b8e0;
 }
 
 /* ═══ BUILD ROUTE SYSTEM ═══════════════════════════════════ */
