@@ -113,6 +113,40 @@ const NARRATOR_FALLBACK_CONSEQUENCES = {
   curious:    "你停下脚步，让大脑收集所有细节。某种规律开始浮现：敌人的移动轨迹，Boss的呼吸节律，一切都有迹可循。\n\n洞察力已激活——战场上的情报向你流动。"
 };
 
+// ─── Narrator Random Effect Pools ─────────────────────────
+// Each tone has a mix of rewards (reward:true) and punishments (reward:false).
+// w = relative weight (higher = more likely).
+const NARRATOR_EFFECT_POOLS = {
+  aggressive: [
+    { w:3, reward:true,  fn: p => { state.narratorMod.damageMul = 1.25; return ['⚔ 战意沸腾', '本回合伤害 ×1.25']; } },
+    { w:2, reward:true,  fn: p => { p.projectiles = Math.min(p.projectiles + 1, 8); return ['⚔ 弹雨狂潮', '+1弹道（本回合）']; } },
+    { w:2, reward:true,  fn: p => { p.crit = Math.min(95, p.crit + 15); return ['⚔ 破绽洞察', '暴击+15%（持续）']; } },
+    { w:2, reward:false, fn: p => { p.hp = Math.max(1, p.hp - p.maxHp * 0.15); return ['⚔ 鲁莽冲锋', '损失15%生命']; } },
+    { w:1, reward:false, fn: p => { state.narratorMod.damageMul = 0.80; return ['⚔ 分心狂暴', '伤害 ×0.80']; } },
+  ],
+  cautious: [
+    { w:3, reward:true,  fn: p => { const h = Math.round(p.maxHp * 0.25); p.hp = Math.min(p.maxHp, p.hp + h); return ['🛡 谨慎调息', '回复25%生命']; } },
+    { w:2, reward:true,  fn: p => { p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25); return ['🛡 坚韧磨砺', '最大生命+25']; } },
+    { w:2, reward:true,  fn: p => { state.narratorMod.damageMul = 1.10; return ['🛡 以守为攻', '伤害 ×1.10']; } },
+    { w:2, reward:false, fn: p => { p.speed = Math.round(p.speed * 0.85); return ['🛡 过度谨慎', '移速-15%（持续）']; } },
+    { w:1, reward:false, fn: p => { state.narratorMod.damageMul = 0.82; return ['🛡 胆怯退缩', '伤害 ×0.82']; } },
+  ],
+  merciful: [
+    { w:3, reward:true,  fn: p => { state.coins = (state.coins || 0) + 100; return ['💚 善举有报', '+100金币']; } },
+    { w:2, reward:true,  fn: p => { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 50); return ['💚 众望所归', '最大生命+20 回复50']; } },
+    { w:2, reward:true,  fn: p => { state.narratorMod.damageMul = 1.12; return ['💚 慈悲共鸣', '伤害 ×1.12']; } },
+    { w:2, reward:false, fn: p => { state.narratorMod.damageMul = 0.80; return ['💚 手下留情', '伤害 ×0.80']; } },
+    { w:1, reward:false, fn: p => { p.hp = Math.max(1, p.hp - p.maxHp * 0.12); return ['💚 失去戒心', '损失12%生命']; } },
+  ],
+  curious: [
+    { w:3, reward:true,  fn: p => { p.fireRate = Math.max(0.05, p.fireRate * 0.85); return ['👁 洞察时机', '攻速+15%']; } },
+    { w:2, reward:true,  fn: p => { state.narratorMod.damageMul = 1.15; p.crit = Math.min(95, p.crit + 8); return ['👁 弱点分析', '伤害×1.15 暴击+8%']; } },
+    { w:2, reward:true,  fn: p => { state.coins = (state.coins || 0) + 70; p.crit = Math.min(95, p.crit + 6); return ['👁 信息有价', '+70金币 暴击+6%']; } },
+    { w:2, reward:false, fn: p => { p.fireRate = p.fireRate * 1.18; return ['👁 分心旁骛', '攻速-18%（持续）']; } },
+    { w:1, reward:false, fn: p => { p.speed = Math.round(p.speed * 0.88); return ['👁 深陷迷思', '移速-12%（持续）']; } },
+  ],
+};
+
 // ─── Narrator State ────────────────────────────────────────
 let _narratorSkipped = false;
 let _narratorActive  = false;
@@ -168,34 +202,36 @@ async function typewriterReveal(el, text, speedMs = 16) {
 // ─── Apply narrator modifier for the current round ─────────
 function applyNarratorModifier(type, value, description) {
   if (!state?.player) return;
-  // Store modifier — damage multiplier applied in applyBulletHit; others applied immediately
-  state.narratorMod = { type, description, damageMul: 1 };
   const p = state.player;
-  switch (type) {
-    case 'aggressive':
-      state.narratorMod.damageMul = 1.15;
-      break;
-    case 'cautious': {
-      const heal = Math.round(p.maxHp * 0.18);
-      p.hp = Math.min(p.maxHp, p.hp + heal);
-      break;
-    }
-    case 'merciful':
-      state.narratorMod.mercifulUsed = false;
-      break;
-    case 'curious':
-      // Reveal: show enemy count / type early as floating text
-      window.setTimeout(() => {
-        const cnt = state.enemies?.length || '?';
-        floatText(p.x, p.y - 70, `洞察：${description}`, '#b090ff', 4);
-      }, 800);
-      break;
-  }
-  // Show toast
+
+  // Base modifier record (damageMul applied in applyBulletHit)
+  state.narratorMod = { type, description, damageMul: 1 };
+
+  // Weighted-random pick from the pool for this tone
+  const pool      = NARRATOR_EFFECT_POOLS[type] || NARRATOR_EFFECT_POOLS.curious;
+  const totalW    = pool.reduce((s, e) => s + e.w, 0);
+  let   roll      = Math.random() * totalW;
+  let   chosen    = pool[pool.length - 1];
+  for (const e of pool) { roll -= e.w; if (roll <= 0) { chosen = e; break; } }
+
+  // Apply the chosen effect (may mutate p / state.narratorMod)
+  const [title, detail] = chosen.fn(p);
+  state.narratorMod.description = `${title} · ${detail}`;
+  state.narratorMod.isReward    = chosen.reward;
+
+  // Color palette per tone
+  const toneColors = { aggressive:'#ff6b6b', cautious:'#6bc4ff', merciful:'#6bff8f', curious:'#c08fff' };
+  const col = toneColors[type] || '#ffd080';
+  state.narratorMod.color = col;
+
+  // Show toast inside narrator overlay
   const toast = document.getElementById('narratorModToast');
   if (toast) {
-    toast.textContent = `[ ${description} ]`;
-    toast.style.display = 'block';
+    const badge = chosen.reward ? '✦ 奖励' : '⚠ 惩罚';
+    toast.innerHTML = `<strong style="color:${col}">${badge}</strong> · ${title}<br><span style="opacity:.8;font-size:11px">${detail}</span>`;
+    toast.style.display      = 'block';
+    toast.style.borderColor  = chosen.reward ? 'rgba(80,200,100,.45)' : 'rgba(220,70,70,.45)';
+    toast.style.background   = chosen.reward ? 'rgba(20,60,30,.45)' : 'rgba(60,10,10,.45)';
   }
 }
 
@@ -617,9 +653,20 @@ const weaponShop = [
 ];
 
 // ─── Pre-run Shop State (main menu) ──────────────────────
-const MENU_START_COINS  = 500;  // gold budget per run
+const MENU_START_COINS  = 500;  // minimum starting budget for brand-new players
 const UPGRADE_COST      = 50;   // flat cost for stat upgrades in menu shop
-let _menuCoins    = MENU_START_COINS;
+const WALLET_KEY        = 'sf_wallet';  // localStorage key for persistent coin bank
+
+function _loadWallet() {
+  try { return Math.max(MENU_START_COINS, parseInt(localStorage.getItem(WALLET_KEY) || String(MENU_START_COINS), 10)); }
+  catch(e) { return MENU_START_COINS; }
+}
+function _saveWallet(coins) {
+  try { localStorage.setItem(WALLET_KEY, String(Math.max(0, Math.round(coins)))); }
+  catch(e) {}
+}
+
+let _menuCoins    = _loadWallet();
 let _menuWeapons  = [];  // { item } — purchased weapons
 let _menuUpgrades = [];  // { upg, value, rarity } — purchased upgrades
 
@@ -3213,7 +3260,10 @@ function startGame() {
 
 // ── Return to main menu after death / restart ───────────────
 function resetToMenu() {
-  _menuCoins    = MENU_START_COINS;
+  // Carry over any unspent in-game coins to the persistent wallet
+  const earned = Math.round(state?.coins || 0);
+  if (earned > 0) _saveWallet(_loadWallet() + earned);
+  _menuCoins    = _loadWallet();
   _menuWeapons  = [];
   _menuUpgrades = [];
   _stageMode    = false;
@@ -3246,9 +3296,12 @@ function hide(el) { el?.classList.remove("show"); }
 function _mmUpdateBudget() {
   const el = document.getElementById("mmBudget");
   if (el) {
-    el.textContent = _menuCoins;
+    el.textContent = _menuCoins.toLocaleString();
     el.style.color = _menuCoins < 300 ? "#ff6060" : _menuCoins < 800 ? "#ffaa30" : "#ffe060";
   }
+  // Sync top-right wallet display
+  const walletEl = document.querySelector('.mm-currency');
+  if (walletEl) walletEl.textContent = `◆ ${_menuCoins.toLocaleString()}`;
   _mmUpdateOwned();
 }
 
@@ -3267,6 +3320,7 @@ function _mmUpdateOwned() {
     tag.title = "点击退款并移除";
     tag.addEventListener("click", () => {
       _menuCoins += item.cost;
+      _saveWallet(_menuCoins);
       _menuWeapons = _menuWeapons.filter(w => w.item !== item);
       _mmUpdateBudget();
       renderMenuShop(); // re-render cards to update state
@@ -3281,6 +3335,7 @@ function _mmUpdateOwned() {
     tag.title = "点击退款并移除";
     tag.addEventListener("click", () => {
       _menuCoins += entry.upg.cost ?? UPGRADE_COST;
+      _saveWallet(_menuCoins);
       _menuUpgrades = _menuUpgrades.filter(u => u !== entry);
       _mmUpdateBudget();
       renderMenuShop();
@@ -3317,6 +3372,7 @@ function _renderMenuWeapons() {
         return;
       }
       _menuCoins -= item.cost;
+      _saveWallet(_menuCoins);
       _menuWeapons.push({ item });
       renderMenuShop();
     });
@@ -3353,6 +3409,7 @@ function _renderMenuUpgrades() {
         return;
       }
       _menuCoins -= upgCost;
+      _saveWallet(_menuCoins);
       _menuUpgrades.push({ upg, value, rarity });
       renderMenuShop();
     });
@@ -4488,7 +4545,7 @@ const NPC_FRIENDS = [
     intro: ['来一杯吗？末日限定配方，喝了不一定死得更快。', '开玩笑！你这样的客人，我可不想失去。']
   },
   {
-    npcName:'双重人格 · 艾拉/暗艾拉', avatar:'🪞',
+    npcName:'双重人格 · 艾拉/暗艾拉', avatar:'🔮',
     systemPrompt:'你是一个拥有双重人格的战士——一面温柔一面残暴，两个声音轮流说话。你用中文对话，每次回复体现两面，不超过两句话。',
     intro: ['你好！很高兴认识——', '……别听她的，你最好别招惹我们。']
   },
@@ -7226,15 +7283,47 @@ function drawPartner() {
 
   const animName = pt.downed ? 'Idle' : pt.anim.name;
   const flipX    = pt.facing < 0;
-  const drawn    = spritesReady && drawSprite('heroine', animName, pt.anim.frame, 0, 12, 90, flipX, 1);
+  // Use wizard sprite for partner when player is duelist/tank (avoid visual clash),
+  // fall back to heroine when player is mage (player already uses wizard)
+  const ptSprite = (state.classId === 'mage') ? 'heroine' : 'wizard';
+  const drawn    = spritesReady && drawSprite(ptSprite, animName, pt.anim.frame, 0, 12, 90, flipX, 1);
 
   if (!drawn) {
-    // Pixel art fallback — small heroine silhouette
-    ctx.fillStyle = '#d04090';
-    ctx.fillRect(-8, -36, 16, 24);
-    ctx.fillRect(-6, -12, 12, 16);
-    ctx.beginPath(); ctx.arc(0, -42, 9, 0, Math.PI*2);
-    ctx.fillStyle = '#f08080'; ctx.fill();
+    // Pixel-art fallback — 艾拉: purple-robed mage silhouette
+    const bob = Math.sin(Date.now() * 0.003) * 1.5;  // gentle float
+    // Robe / body
+    ctx.fillStyle = '#7040c0';
+    ctx.fillRect(-7, -35 + bob, 14, 22);
+    // Robe skirt (wider at bottom)
+    ctx.fillStyle = '#5030a0';
+    ctx.beginPath();
+    ctx.moveTo(-10, -13 + bob); ctx.lineTo(10, -13 + bob);
+    ctx.lineTo(13, -1 + bob);  ctx.lineTo(-13, -1 + bob);
+    ctx.closePath(); ctx.fill();
+    // Arms
+    ctx.fillStyle = '#7040c0';
+    ctx.fillRect(-13, -33 + bob, 5, 14);
+    ctx.fillRect(8, -33 + bob, 5, 14);
+    // Head
+    ctx.beginPath(); ctx.arc(0, -42 + bob, 9, 0, Math.PI * 2);
+    ctx.fillStyle = '#e8b090'; ctx.fill();
+    // Hair (long purple)
+    ctx.fillStyle = '#9060e0';
+    ctx.fillRect(-9, -51 + bob, 18, 10);
+    ctx.fillRect(-10, -48 + bob, 4, 16);
+    ctx.fillRect(6, -48 + bob, 4, 16);
+    // Eyes glow
+    ctx.fillStyle = '#c0e0ff';
+    ctx.fillRect(-4, -44 + bob, 3, 3);
+    ctx.fillRect(1, -44 + bob, 3, 3);
+    // Staff
+    ctx.strokeStyle = '#c090ff'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(flipX ? -14 : 14, -38 + bob);
+    ctx.lineTo(flipX ? -20 : 20, -58 + bob);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(flipX ? -20 : 20, -60 + bob, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#e0b0ff'; ctx.fill();
   }
   ctx.restore();
   ctx.globalAlpha = 1;
