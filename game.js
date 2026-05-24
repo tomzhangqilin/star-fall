@@ -62,55 +62,59 @@ TONE RULES:
 - Chinese chapter names and NPC names encouraged; dialogue can be bilingual
 - Vary NPC archetypes each round — never repeat the same character type`;
 
-// ─── Narrator Fallback Scenes (used when API fails) ────────
+// ─── Narrator Fallback Scenes — 拯救世界主线 ───────────────
+// 背景：三年前魔兽王撕裂天空，开启星裂之门，魔兽大军淹没星陨大陆。
+// 所有人类城市沦陷，幸存者要么被奴役、要么躲在地下苟延残喘。
+// 玩家是极少数尚未被控制的觉醒者，唯一的目标：摧毁魔兽王的控制水晶，
+// 解放全人类。
 const NARRATOR_FALLBACKS = [
-  { // 0: 森林 / 早期
-    prose: '翠叶森林在你脚下低语，腐土与鲜血的气息混杂在晨雾之中。你手背上的发光纹路已蔓延至手腕——星陨大陆的伤口找到了新的容器。树冠之间，一个声音突然响起。\n\n伤兵·陈望蜷缩在树根旁，用布条捂住腰侧的伤口。\n『前面有三条路，走中间那条的人……没有一个回来报信。』\n『右边有个老巫婆——她疯了，但她知道怪物的弱点。』',
+  { // 0: 废都北境 — 刚逃出奴役营
+    prose: '废都北境的天空常年是暗红色的——那是三年前星裂之门留下的伤疤，至今未合。你刚从一处奴役营逃出，手腕上的铁环印记还在发烫。\n\n街道上有被魔兽控制的人类士兵，眼神空洞，机械地巡逻。偶尔其中一个停下来，像是感知到了什么异常。\n\n残存抵抗军·林破从废墟缺口探出头。\n『这里』\n\n『快——他们的感知器每隔两分钟扫描一次。』\n『我知道一条路能绕过前哨站，但要穿过沼地……那里有魔兽猎手在守着。』',
     choices: [
-      { id:'A', label:'向右，寻找那个巫婆', tone:'curious' },
-      { id:'B', label:'为他包扎，换取情报', tone:'merciful' },
-      { id:'C', label:'无视他，直冲前方', tone:'aggressive' }
+      { id:'A', label:'听他的，绕道沼地', tone:'cautious' },
+      { id:'B', label:'问他抵抗军的下落', tone:'curious' },
+      { id:'C', label:'正面突破，趁现在', tone:'aggressive' }
     ]
   },
-  { // 1: 沼泽
-    prose: '雾眠沼泽的水面平静得令人不安，每一步都可能踩空。你腕间的腐化纹路倒映在水中，引来了水面之下的注目——那些眼睛一眨不眨。\n\n渔夫·沼泽李坐在朽木上，手握一串鱼骨符咒，头也不抬。\n『今天的雾是有目的的，你能感觉到吗？』\n『那些东西不怕刀，但怕声音……大声的声音能让它们退缩片刻。』',
+  { // 1: 奴役沼地 — 抵抗军营地
+    prose: '奴役沼地的磷火在夜间指引着幸存者——也指引着猎手。你穿过了两道魔兽岗哨，靴子沾满了腐臭的泥。\n\n地下营地里挤着四十七个人，是这片区域最后的自由意志。他们的眼神里有的是恐惧，有的是愤怒，也有的是麻木。\n\n抵抗军军医·沈白坐在简陋的手术台旁，手里握着一张用血画成的地图。\n『你来得正好，或者来得太晚——我说不准。』\n\n『魔兽王的控制水晶在裂空深渊最深处。但通往那里的路上，有三个魔将守着关卡。你必须一个个打穿。』\n『我手里有水晶的弱点情报……但情报是有价的。』',
     choices: [
-      { id:'A', label:'买下他的鱼骨符咒', tone:'cautious' },
-      { id:'B', label:'坐下，听他细说', tone:'curious' },
-      { id:'C', label:'抢走符咒，立刻离开', tone:'aggressive' }
+      { id:'A', label:'拿出粮食，换取情报', tone:'merciful' },
+      { id:'B', label:'仔细研究那张血地图', tone:'curious' },
+      { id:'C', label:'告诉他自己已有足够实力', tone:'aggressive' }
     ]
   },
-  { // 2: 遗迹
-    prose: '赤砂遗迹的石柱在热浪中颤抖，你的影子拉得比太阳允许的更长。进化已经开始扭曲你与光的关系。废墟深处，某样东西在有规律地敲击——不像野兽，更像倒计时。\n\n一个小女孩坐在碎裂的石像旁，手里捏着一枚发光的琥珀。\n『叔叔，你的眼睛会发光。』\n『那些怪兽绕着石柱转……站在石柱旁边，它们就不会包围你。』',
+  { // 2: 魔塔遗址 — 脱控的前人类卫兵
+    prose: '魔塔遗址的核心曾是人类最高学府，现在是魔兽王的意识中转站。塔体每隔十二秒发出一次脉冲，让方圆十里内所有被控制的人类保持服从状态。\n\n你摧毁了脉冲天线，周围的士兵像断线的玩具一样颓然倒地。但其中一个站起来了。\n\n脱控卫兵·张硬——眼神里混浊与清醒在交替闪烁。\n『我……能看见你了。是真正地看见。』\n\n『控制信号断了，但不会超过十五分钟……我失控的时间里做了很多事，我记得……』\n『前面的守卫比我重度控制，他们不会恢复清醒。你只有一个选择。』',
     choices: [
-      { id:'A', label:'收下琥珀，带她离开', tone:'merciful' },
-      { id:'B', label:'问她关于敌人的细节', tone:'curious' },
-      { id:'C', label:'点头离开，全力冲击', tone:'aggressive' }
+      { id:'A', label:'让他留下，继续前进', tone:'aggressive' },
+      { id:'B', label:'问他被控制时的记忆', tone:'curious' },
+      { id:'C', label:'帮他想办法永久脱控', tone:'merciful' }
     ]
   },
-  { // 3: Boss前
-    prose: '空气在此刻凝固。你能感觉到它——不是声音，是一种压力，像整片大陆正在屏住呼吸，等待某件不可避免之事的降临。你腐化的肌肉开始颤抖，不是因为恐惧，而是因为共鸣。\n\n一名古战场幽魂从地面升起，战甲已成灰烬，眼眶空洞却有光。\n『它……已经感知到你了。』\n『强者不是无惧死亡的人……是死亡也不愿轻易收走的人。做好准备。』',
+  { // 3: Boss前 — 魔将守卫
+    prose: '魔将要塞的门在你面前轰然作响——不是开启，是某种巨大的存在在里面移动时引发的震动。空气中弥漫着硫磺和铁锈，还有某种更深层的东西，像是恐惧本身在气态化。\n\n古战场幽魂·无名将领，铠甲腐烂成了他身体的一部分，从地面缓缓升起，眼眶发出黯淡的光。\n『又一个来死的……还是来拯救的？』\n\n『我在这里等了三百年，见过无数个跟你一样的人。他们都败了，我记住了他们的错误。』\n『魔将的左侧有一道裂缝——那是它唯一的弱点，也是它最强的陷阱。』',
     choices: [
-      { id:'A', label:'以暴制暴，正面迎击', tone:'aggressive' },
-      { id:'B', label:'请他讲述Boss的弱点', tone:'curious' },
-      { id:'C', label:'沉默，让意识平静', tone:'cautious' }
+      { id:'A', label:'正面强攻，以命搏命', tone:'aggressive' },
+      { id:'B', label:'向他学习魔将的战法', tone:'curious' },
+      { id:'C', label:'闭目沉气，让恐惧沉淀', tone:'cautious' }
     ]
   },
-  { // 4: 高波次
-    prose: '你已经走得太远，远到这片大陆开始把你当作一部分来接受。你的伤口愈合得太快，你的眼睛在黑暗中发光，你杀死敌人时心跳甚至没有加速。这不正常。\n\n腐化商人·零从阴影中踱出，面具后面看不到表情。\n『又一个走到这里的人。你比上一个撑得更久。』\n『前面的怪物已经进化了——它们在适应你，就像你在适应它们。』',
+  { // 4: 裂空深渊 — 深入腹地的代价
+    prose: '你已经走到了没有人类的地方。裂空深渊的岩壁刻满了魔纹，有些图案你意识到自己能看懂——不是学的，是身体里某种东西在共鸣。\n\n你的伤口愈合时有微弱的黑光，你的眼睛在黑暗中发光……你正在变成某种人类以外的存在。\n\n旅行者·残影——一个看起来像你三年前的人，坐在岩石上，眼神里有你认不出来的东西。\n『我是先你一步到这里的人。』\n\n『控制水晶就在前面，但打碎它会怎样……我没有勇气去试。你呢？』\n『还是说，你已经不在乎了？』',
     choices: [
-      { id:'A', label:'买下他的强化药剂', tone:'cautious' },
-      { id:'B', label:'威胁他说出更多', tone:'aggressive' },
-      { id:'C', label:'问他上一个人的命运', tone:'curious' }
+      { id:'A', label:'我为所有人而战，不只是自己', tone:'merciful' },
+      { id:'B', label:'告诉我水晶的结构', tone:'curious' },
+      { id:'C', label:'什么代价我都接受', tone:'aggressive' }
     ]
   }
 ];
 
 const NARRATOR_FALLBACK_CONSEQUENCES = {
-  aggressive: "你的怒意像淬火的刀刃，切断了所有犹豫。肌肉绷紧，血液开始沸腾——愤怒是这片大陆上最纯粹的燃料。\n\n本回合攻击力提升，但代价由你的身体承担。",
-  cautious:   "你深吸一口气，让意识沉入骨髓。环境开始变得清晰——每一块石头，每一处阴影，都成了你的盟友。\n\n体力得到恢复，你以最佳状态进入战场。",
-  merciful:   "你的善意在这个腐化的世界里显得格格不入，但正是这种违和感让对方选择信任你。他悄声指了指敌人的侧翼，给了你一个机会。\n\n信息就是力量——现在你比敌人多知道一件事。",
-  curious:    "你停下脚步，让大脑收集所有细节。某种规律开始浮现：敌人的移动轨迹，Boss的呼吸节律，一切都有迹可循。\n\n洞察力已激活——战场上的情报向你流动。"
+  aggressive: '你把恐惧压进肾上腺素里，肌肉绷紧，步伐加快——这片被魔兽踩碎的大地上，愤怒是最后一种纯粹的能量。\n\n没有时间思考。只有前进，和前进之后等你的东西。',
+  cautious:   '你深呼吸，把周围的噪音屏蔽掉，让意识沉入更底层。恐惧还在，但它变成了一把尺子，而不是一道墙。\n\n你开始看见缝隙，看见节奏，看见人类能赢的角度。',
+  merciful:   '在这个被魔兽控制的世界里，善意是最稀缺的武器。对方停顿了一下——也许他们也好久没被当人看了。\n\n那一瞬间的连结换来的情报，比任何装备都值钱。',
+  curious:    '你停下来，让大脑去读那些普通人看不见的细节。魔兽的移动有规律，Boss的呼吸有节奏——一切秩序的背后都是弱点。\n\n你不只是一个战士。你是这场战争里唯一真正在思考的人。'
 };
 
 // ─── Narrator Random Effect Pools ─────────────────────────
@@ -439,11 +443,11 @@ const ui = {
 
 // ─── World Data ───────────────────────────────────────────
 const chapters = [
-  { name:"翠叶森林", tint:"#2a5818", accent:"#5aee3a" },
-  { name:"雾眠沼泽", tint:"#1e4a28", accent:"#3ae8b0" },
-  { name:"赤砂遗迹", tint:"#5a3010", accent:"#ff9a40" },
-  { name:"霜月城垣", tint:"#1a3870", accent:"#80e0ff" },
-  { name:"星裂深渊", tint:"#200a38", accent:"#e070ff" }
+  { name:"废都北境", tint:"#2a3010", accent:"#a0cc40" },
+  { name:"奴役沼地", tint:"#1a3020", accent:"#40d890" },
+  { name:"魔塔遗址", tint:"#3a1808", accent:"#ff7030" },
+  { name:"魔将要塞", tint:"#1a1050", accent:"#8060ff" },
+  { name:"裂空深渊", tint:"#280010", accent:"#ff3060" }
 ];
 
 const rarities = [
@@ -7278,7 +7282,8 @@ function drawPartner() {
   if (!pt) return;
   const z   = terrainHeightAt(pt.x, pt.y);
   const sy  = pt.y - z;
-  const a   = pt.downed ? 0.45 : (pt.invuln > 0 ? 0.55 + Math.sin(pt.invuln * 40) * 0.45 : 1);
+  // No flicker: downed = semi-transparent, invuln = brief red-edge flash, normal = fully opaque
+  const a   = pt.downed ? 0.50 : 1.0;
 
   ctx.save();
   ctx.globalAlpha = a;
@@ -7289,6 +7294,11 @@ function drawPartner() {
   const animName = pt.downed ? 'Idle' : pt.anim.name;
   const flipX    = pt.facing < 0;
   // 艾拉 uses her own dedicated sprite (ella) — completely independent of the 3 player classes
+  // Hurt-flash: red shadow glow instead of alpha flicker
+  if (pt.invuln > 0) {
+    ctx.shadowColor = '#ff4040';
+    ctx.shadowBlur  = 14 * (pt.invuln / 0.4);
+  }
   const drawn    = spritesReady && drawSprite('ella', animName, pt.anim.frame, 0, 6, 88, flipX, 1);
 
   if (!drawn) {
@@ -7328,6 +7338,7 @@ function drawPartner() {
     ctx.beginPath(); ctx.arc(flipX ? -20 : 20, -60 + bob, 4, 0, Math.PI * 2);
     ctx.fillStyle = '#e0b0ff'; ctx.fill();
   }
+  ctx.shadowBlur = 0;
   ctx.restore();
   ctx.globalAlpha = 1;
 
