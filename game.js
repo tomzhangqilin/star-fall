@@ -1232,6 +1232,11 @@ const SPRITE_DEFS = {
     frames: { Idle:6, Walk:6, Attack1:6 },
     files:  { Idle:'wizard-sheet', Walk:'wizard-sheet', Attack1:'wizard-sheet' }
   },
+  ella: {   // 艾拉 — partner companion (256x32 strips, 8 frames each)
+    base:   'sprites/ella',
+    frames: { Idle:8, Walk:8, Attack1:8, Hurt:8 },
+    files:  { Idle:'idle', Walk:'walk', Attack1:'attack', Hurt:'hurt' }
+  },
   // ── Enemies ─────────────────────────────────────────────
   hound: {   // Normal — Hell-Hound (64×48/frame)
     base: 'sprites/hound',
@@ -7217,8 +7222,8 @@ function _animPartner(name, dt, fps) {
     pt.anim.name = name; pt.anim.frame = 0; pt.anim.timer = 0;
   }
   pt.anim.timer += dt;
-  const def = SPRITE_DEFS.heroine;
-  const frameCount = def?.frames[name] || 4;
+  const def = SPRITE_DEFS.ella;
+  const frameCount = def?.frames[name] || 8;
   if (pt.anim.timer >= 1 / fps) {
     pt.anim.timer = 0;
     pt.anim.frame = (pt.anim.frame + 1) % frameCount;
@@ -7283,10 +7288,8 @@ function drawPartner() {
 
   const animName = pt.downed ? 'Idle' : pt.anim.name;
   const flipX    = pt.facing < 0;
-  // Use wizard sprite for partner when player is duelist/tank (avoid visual clash),
-  // fall back to heroine when player is mage (player already uses wizard)
-  const ptSprite = (state.classId === 'mage') ? 'heroine' : 'wizard';
-  const drawn    = spritesReady && drawSprite(ptSprite, animName, pt.anim.frame, 0, 12, 90, flipX, 1);
+  // 艾拉 uses her own dedicated sprite (ella) — completely independent of the 3 player classes
+  const drawn    = spritesReady && drawSprite('ella', animName, pt.anim.frame, 0, 6, 88, flipX, 1);
 
   if (!drawn) {
     // Pixel-art fallback — 艾拉: purple-robed mage silhouette
