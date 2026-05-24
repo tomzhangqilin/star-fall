@@ -116,11 +116,13 @@ const NARRATOR_FALLBACK_CONSEQUENCES = {
 // ─── Narrator State ────────────────────────────────────────
 let _narratorSkipped = false;
 let _narratorActive  = false;
+let _narratorAbort   = null;   // AbortController for in-flight API call
 
-// ─── Narrator API Call (Qianfan, same as boss dialogue) ───
-async function _narratorAPICall(messages) {
+// ─── Narrator API Call (with AbortSignal + 6s timeout) ────
+async function _narratorAPICall(messages, signal) {
   const resp = await fetch('https://qianfan.baidubce.com/v2/chat/completions', {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${QIANFAN_API_KEY}`
@@ -198,143 +200,164 @@ function applyNarratorModifier(type, value, description) {
 }
 
 // ─── Main narrator scene runner ────────────────────────────
-async function runNarratorScene(onDone) {
-  if (!QIANFAN_API_KEY) { onDone(); return; }
+// NON-BLOCKING: always renders pre-written fallback immediately.
+// API call runs in background with 6s timeout; if it returns before
+// the player chooses, content is swapped in-place silently.
+function runNarratorScene(onDone) {
+  // Guard: prevent double-invocation
+  if (_narratorActive) { onDone(); return; }
+
   _narratorSkipped = false;
   _narratorActive  = true;
 
-  // Gather game context
-  const ch    = chapters[state.chapter] || chapters[0];
-  const cls   = classes[state.classId]  || classes.duelist;
-  const ev    = state.evolution;
-  const domScore = Math.round(ev[ev.dominant] || 0);
-  const isBoss   = state.round % state.shopEvery === 0;
-  const weaponList = state.ownedWeapons?.map(w => w.name).join(', ') || '无';
-  const userMsg = `Round: ${state.round}\nChapter: ${ch.name}\nClass: ${state.classId} — ${cls.name}\nEvolution build: ${ev.dominant} at ${domScore}% corruption\nWeapons: ${weaponList}\nBoss round: ${isBoss}\nBegin the scene.`;
+  // Abort any lingering previous API call
+  if (_narratorAbort) { _narratorAbort.abort(); _narratorAbort = null; }
 
-  // Show overlay, pause game
+  // ── Gather context ──────────────────────────────────────
+  const chData    = chapters[state.chapter] || chapters[0];
+  const cls       = classes[state.classId]  || classes.duelist;
+  const ev        = state.evolution;
+  const isBoss    = state.round % state.shopEvery === 0;
+  const domScore  = Math.round(ev[ev.dominant] || 0);
+  const weaponList= state.ownedWeapons?.map(w => w.name).join(', ') || '无';
+  const userMsg   = `Round: ${state.round}\nChapter: ${chData.name}\nClass: ${state.classId} — ${cls.name}\nEvolution: ${ev.dominant} at ${domScore}%\nWeapons: ${weaponList}\nBoss round: ${isBoss}\nBegin the scene.`;
+
+  // ── Pick fallback scene ─────────────────────────────────
+  const fbIdx  = isBoss ? 3 : ((state.round - 2) % NARRATOR_FALLBACKS.length);
+  const fb     = NARRATOR_FALLBACKS[Math.max(0, fbIdx)] || NARRATOR_FALLBACKS[0];
+
+  // ── Show overlay ────────────────────────────────────────
   state.running = false;
   paused = true;
-  const overlay  = document.getElementById('narratorOverlay');
-  const prose    = document.getElementById('narratorProse');
-  const choicesEl= document.getElementById('narratorChoices');
-  const conEl    = document.getElementById('narratorConsequence');
-  const statusEl = document.getElementById('narratorStatus');
-  const toastEl  = document.getElementById('narratorModToast');
+
+  const overlay   = document.getElementById('narratorOverlay');
+  const prose     = document.getElementById('narratorProse');
+  const choicesEl = document.getElementById('narratorChoices');
+  const conEl     = document.getElementById('narratorConsequence');
+  const statusEl  = document.getElementById('narratorStatus');
+  const toastEl   = document.getElementById('narratorModToast');
+  const skipBtn   = document.getElementById('narratorSkip');
+  const badgeEl   = document.getElementById('narratorBadge');
+  const chapEl    = document.getElementById('narratorChapter');
+
   prose.innerHTML = '';
   choicesEl.innerHTML = ''; choicesEl.style.display = 'none';
   conEl.innerHTML = ''; conEl.style.display = 'none';
   toastEl.style.display = 'none';
-  statusEl.textContent = '叙事者正在书写命运…';
-  document.getElementById('narratorBadge').textContent   = `第 ${state.round} 回合`;
-  document.getElementById('narratorChapter').textContent = ch.name;
+  statusEl.textContent = '';
+  badgeEl.textContent  = `第 ${state.round} 回合`;
+  chapEl.textContent   = chData.name;
   overlay.style.display = 'flex';
 
-  // Skip button
-  const skipBtn = document.getElementById('narratorSkip');
-  skipBtn.onclick = () => {
+  // Internal close helper
+  function _close() {
+    if (_narratorAbort) { _narratorAbort.abort(); _narratorAbort = null; }
     _narratorSkipped = true;
+    _narratorActive  = false;
     overlay.style.display = 'none';
-    _narratorActive = false;
     onDone();
-  };
+  }
 
-  // Pick fallback scene (cycle by round, bias toward boss scene on boss rounds)
-  const isBoss = state.round % state.shopEvery === 0;
-  const fbIdx  = isBoss ? 3 : (state.round % 3);
-  const fallback = NARRATOR_FALLBACKS[fbIdx] || NARRATOR_FALLBACKS[0];
+  // Skip button — always works immediately
+  skipBtn.onclick = _close;
 
-  // Turn 1: try AI, fall back to pre-written scene
-  const messages = [{ role: 'user', content: userMsg }];
+  // Safety auto-close after 45s (stuck-page failsafe)
+  const _safetyTimer = window.setTimeout(_close, 45000);
+
+  // ── Start with pre-written fallback immediately ─────────
+  let narratorText  = fb.prose;
+  let parsedChoices = fb.choices.slice();
   let firstResponse = '';
-  let usingFallback = false;
-  try {
-    firstResponse = await _narratorAPICall(messages);
-  } catch(e) {
-    usingFallback = true;
-  }
-  if (_narratorSkipped) return;
+  let aiReady       = false;     // true if AI responded before player chose
 
-  // Parse AI response (or use fallback)
-  let narratorText, parsedChoices;
-  if (!usingFallback) {
-    const choicesTag = firstResponse.match(/<choices>([\s\S]*?)<\/choices>/);
-    narratorText  = choicesTag
-      ? firstResponse.slice(0, firstResponse.indexOf('<choices>')).trim()
-      : firstResponse.trim();
-    parsedChoices = [];
-    if (choicesTag) {
-      try { parsedChoices = JSON.parse(choicesTag[1].trim()); } catch(e) {}
-    }
-    // If parse failed or no choices returned, fall back
-    if (!parsedChoices.length) usingFallback = true;
-  }
-  if (usingFallback) {
-    narratorText  = fallback.prose;
-    parsedChoices = fallback.choices;
+  // ── Fire API in background (non-blocking) ───────────────
+  if (QIANFAN_API_KEY) {
+    _narratorAbort = new AbortController();
+    const sig = _narratorAbort.signal;
+    const apiTimeout = window.setTimeout(() => { _narratorAbort?.abort(); }, 6000);
+    _narratorAPICall([{ role:'user', content:userMsg }], sig)
+      .then(resp => {
+        clearTimeout(apiTimeout);
+        if (_narratorSkipped || !resp) return;
+        const tag = resp.match(/<choices>([\s\S]*?)<\/choices>/);
+        if (!tag) return;
+        let choices = [];
+        try { choices = JSON.parse(tag[1].trim()); } catch(e) { return; }
+        if (choices.length !== 3) return;
+        // AI responded in time — swap content
+        firstResponse = resp;
+        narratorText  = resp.slice(0, resp.indexOf('<choices>')).trim();
+        parsedChoices = choices;
+        aiReady       = true;
+      })
+      .catch(() => { clearTimeout(apiTimeout); });
   }
 
-  // Typewriter narration
-  statusEl.textContent = '';
-  await typewriterReveal(prose, narratorText, 18);
-  if (_narratorSkipped) return;
+  // ── Typewriter narration (uses fallback while API loads) ─
+  typewriterReveal(prose, narratorText, 16).then(() => {
+    if (_narratorSkipped) return;
 
-  // Show choice buttons
-  statusEl.textContent = '做出你的选择——';
-  choicesEl.style.display = 'flex';
-  parsedChoices.forEach(choice => {
-    const btn = document.createElement('button');
-    btn.className = `narr-choice-btn tone-${choice.tone}`;
-    btn.innerHTML = `<span class="narr-choice-id">${choice.id}</span><span>${choice.label}</span>`;
-    btn.onclick = async () => {
-      if (_narratorSkipped) return;
-      choicesEl.querySelectorAll('button').forEach(b => b.disabled = true);
-      statusEl.textContent = '命运正在回应…';
+    // Show choices (either fallback or AI if it landed in time)
+    statusEl.textContent = '做出你的选择——';
+    choicesEl.style.display = 'flex';
 
-      let conText = '';
-      let modType = choice.tone;
-
-      if (!usingFallback) {
-        // Turn 2: consequence + modifier via AI
-        messages.push({ role: 'assistant', content: firstResponse });
-        messages.push({ role: 'user', content: choice.id });
-        let secondResponse = '';
-        try {
-          secondResponse = await _narratorAPICall(messages);
-        } catch(e) { secondResponse = ''; }
+    parsedChoices.forEach(choice => {
+      const btn = document.createElement('button');
+      btn.className = `narr-choice-btn tone-${choice.tone}`;
+      btn.innerHTML = `<span class="narr-choice-id">${choice.id}</span><span>${choice.label}</span>`;
+      btn.onclick = () => {
         if (_narratorSkipped) return;
+        clearTimeout(_safetyTimer);
+        choicesEl.querySelectorAll('button').forEach(b => b.disabled = true);
+        statusEl.textContent = aiReady ? '命运正在回应…' : '';
 
-        const modMatch = secondResponse.match(/<modifier\s+type="(\w+)"\s+value="([^"]*)"\s+description="([^"]*)"\s*\/>/);
-        if (modMatch) {
-          applyNarratorModifier(modMatch[1], modMatch[2], modMatch[3]);
-          modType = modMatch[1];
+        // Consequence: try AI (turn 2) if we have a first response, else use fallback
+        const doConsequence = (conText) => {
+          const tone = choice.tone;
+          applyNarratorModifier(tone, '1',
+            NARRATOR_FALLBACK_CONSEQUENCES[tone]?.split('\n')[0] || tone);
+          choicesEl.style.display = 'none';
+          conEl.style.display = 'block';
+          statusEl.textContent = '';
+          typewriterReveal(conEl, conText, 20).then(() => {
+            if (_narratorSkipped) return;
+            window.setTimeout(() => {
+              if (_narratorSkipped) return;
+              overlay.style.display = 'none';
+              _narratorActive = false;
+              _narratorAbort = null;
+              onDone();
+            }, 1600);
+          });
+        };
+
+        if (aiReady && firstResponse) {
+          // Turn 2 via API with 5s timeout
+          const ctrl2 = new AbortController();
+          window.setTimeout(() => ctrl2.abort(), 5000);
+          const msgs2 = [
+            { role:'user', content:userMsg },
+            { role:'assistant', content:firstResponse },
+            { role:'user', content:choice.id }
+          ];
+          _narratorAPICall(msgs2, ctrl2.signal)
+            .then(resp2 => {
+              if (_narratorSkipped) return;
+              const modMatch = resp2.match(/<modifier\s+type="(\w+)"\s+value="([^"]*)"\s+description="([^"]*)"\s*\/>/);
+              if (modMatch) applyNarratorModifier(modMatch[1], modMatch[2], modMatch[3]);
+              const con = resp2
+                .replace(/<modifier[^>]*\/>/g, '')
+                .replace(/<begin_combat\/>/g, '')
+                .trim() || NARRATOR_FALLBACK_CONSEQUENCES[choice.tone] || '';
+              doConsequence(con);
+            })
+            .catch(() => doConsequence(NARRATOR_FALLBACK_CONSEQUENCES[choice.tone] || ''));
         } else {
-          applyNarratorModifier(choice.tone, '1', NARRATOR_FALLBACK_CONSEQUENCES[choice.tone]?.split('\n')[0] || '');
+          doConsequence(NARRATOR_FALLBACK_CONSEQUENCES[choice.tone] || '');
         }
-        conText = secondResponse
-          .replace(/<modifier[^>]*\/>/g, '')
-          .replace(/<begin_combat\/>/g, '')
-          .trim();
-        if (!conText) conText = NARRATOR_FALLBACK_CONSEQUENCES[choice.tone] || '';
-      } else {
-        // Fallback consequence
-        applyNarratorModifier(choice.tone, '1', NARRATOR_FALLBACK_CONSEQUENCES[choice.tone]?.split('\n')[0] || '');
-        conText = NARRATOR_FALLBACK_CONSEQUENCES[choice.tone] || '';
-      }
-
-      choicesEl.style.display = 'none';
-      conEl.style.display     = 'block';
-      statusEl.textContent    = '';
-      await typewriterReveal(conEl, conText, 22);
-      if (_narratorSkipped) return;
-
-      await new Promise(r => setTimeout(r, 1800));
-      if (_narratorSkipped) return;
-      overlay.style.display = 'none';
-      _narratorActive = false;
-      onDone();
-    };
-    choicesEl.appendChild(btn);
+      };
+      choicesEl.appendChild(btn);
+    });
   });
 }
 
