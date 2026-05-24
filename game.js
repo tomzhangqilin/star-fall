@@ -11,6 +11,269 @@ const ctx = canvas.getContext("2d");
 const QIANFAN_API_KEY = 'bce-v3/ALTAK-8PR6okIuj9fJX7uvawsOr/fcef1a002f5624eeb8621d8169884bba9d4fb655';
 const QIANFAN_MODEL   = 'ernie-speed-128k'; // 免费额度最多的模型
 
+// ─── Narrator System Prompt ────────────────────────────────
+const NARRATOR_SYSTEM_PROMPT = `You are the Narrator of STARFALL LAND (星陨大陆), a dark fantasy roguelike world corrupted by a collapsing star.
+
+Your role is to run a short DnD-style narrative dialogue scene BEFORE each combat round begins. You speak as an omniscient, atmospheric narrator — think Hades game narrator mixed with a grim fantasy dungeon master.
+
+SCENE STRUCTURE — follow this exactly:
+
+1. OPENING NARRATION (2–3 sentences)
+   - Describe the environment arriving into this round's chapter
+   - Reference the player's physical mutation/evolution visually
+   - Dark, poetic, slightly unsettling tone
+   - End on a hook that introduces the NPC or situation
+
+2. NPC ENCOUNTER
+   - Introduce ONE named NPC: a merchant, a dying soldier, a cursed creature, a ghost, a cultist, a child, etc.
+   - NPC delivers 1–2 lines of dialogue in their voice
+   - NPC gives a QUEST HINT — vague information about what lies ahead
+   - The hint should feel like intelligence, rumor, or warning — never a direct game instruction
+
+3. PLAYER CHOICES
+   Return EXACTLY 3 choices as a JSON array inside <choices> tags:
+   <choices>
+   [
+     {"id": "A", "label": "Short action label (≤6 words)", "tone": "aggressive|cautious|merciful|curious"},
+     {"id": "B", "label": "Short action label (≤6 words)", "tone": "aggressive|cautious|merciful|curious"},
+     {"id": "C", "label": "Short action label (≤6 words)", "tone": "aggressive|cautious|merciful|curious"}
+   ]
+   </choices>
+
+4. AWAIT PLAYER CHOICE — Stop here.
+
+AFTER RECEIVING PLAYER CHOICE:
+
+5. CONSEQUENCE (2–3 sentences, atmospheric prose)
+
+6. Apply a GAMEPLAY MODIFIER based on tone — output as:
+   <modifier type="{type}" value="{value}" description="{short effect text (Chinese ok)}"/>
+   Where type is: aggressive | cautious | merciful | curious
+
+7. MISSION BRIEFING (1 sentence, direct)
+
+8. Output exactly: <begin_combat/>
+
+TONE RULES:
+- Never break the fourth wall or mention game mechanics by name
+- Reference the player's mutations in flavor text (e.g. 80% corrupt = visibly wrong body)
+- Boss rounds should feel DREADFUL
+- Keep total response under 220 words before the choices
+- Chinese chapter names and NPC names encouraged; dialogue can be bilingual
+- Vary NPC archetypes each round — never repeat the same character type`;
+
+// ─── Narrator State ────────────────────────────────────────
+let _narratorSkipped = false;
+let _narratorActive  = false;
+
+// ─── Narrator API Call (Qianfan, same as boss dialogue) ───
+async function _narratorAPICall(messages) {
+  const resp = await fetch('https://qianfan.baidubce.com/v2/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${QIANFAN_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: QIANFAN_MODEL,
+      max_tokens: 900,
+      messages: [
+        { role: 'system', content: NARRATOR_SYSTEM_PROMPT },
+        ...messages
+      ]
+    })
+  });
+  const data = await resp.json();
+  if (data?.error || !data?.choices?.[0]?.message?.content) {
+    throw new Error('narrator api error');
+  }
+  return data.choices[0].message.content;
+}
+
+// ─── Typewriter text reveal ────────────────────────────────
+async function typewriterReveal(el, text, speedMs = 16) {
+  el.innerHTML = '';
+  const lines = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').split('\n');
+  for (const rawLine of lines) {
+    if (_narratorSkipped) { el.innerHTML = text.replace(/\n/g, '<br>'); return; }
+    if (!rawLine.trim()) { el.appendChild(document.createElement('br')); continue; }
+    const p = document.createElement('p');
+    el.appendChild(p);
+    // strip remaining markdown for safety
+    const plainLine = rawLine.replace(/\*+/g, '');
+    for (const char of plainLine) {
+      if (_narratorSkipped) { p.textContent = plainLine; break; }
+      p.textContent += char;
+      if (char.trim()) await new Promise(r => setTimeout(r, speedMs));
+    }
+    // auto-scroll
+    const scroll = document.getElementById('narratorScroll');
+    if (scroll) scroll.scrollTop = scroll.scrollHeight;
+  }
+}
+
+// ─── Apply narrator modifier for the current round ─────────
+function applyNarratorModifier(type, value, description) {
+  if (!state?.player) return;
+  // Store modifier — damage multiplier applied in applyBulletHit; others applied immediately
+  state.narratorMod = { type, description, damageMul: 1 };
+  const p = state.player;
+  switch (type) {
+    case 'aggressive':
+      state.narratorMod.damageMul = 1.15;
+      break;
+    case 'cautious': {
+      const heal = Math.round(p.maxHp * 0.18);
+      p.hp = Math.min(p.maxHp, p.hp + heal);
+      break;
+    }
+    case 'merciful':
+      state.narratorMod.mercifulUsed = false;
+      break;
+    case 'curious':
+      // Reveal: show enemy count / type early as floating text
+      window.setTimeout(() => {
+        const cnt = state.enemies?.length || '?';
+        floatText(p.x, p.y - 70, `洞察：${description}`, '#b090ff', 4);
+      }, 800);
+      break;
+  }
+  // Show toast
+  const toast = document.getElementById('narratorModToast');
+  if (toast) {
+    toast.textContent = `[ ${description} ]`;
+    toast.style.display = 'block';
+  }
+}
+
+// ─── Main narrator scene runner ────────────────────────────
+async function runNarratorScene(onDone) {
+  if (!QIANFAN_API_KEY) { onDone(); return; }
+  _narratorSkipped = false;
+  _narratorActive  = true;
+
+  // Gather game context
+  const ch    = chapters[state.chapter] || chapters[0];
+  const cls   = classes[state.classId]  || classes.duelist;
+  const ev    = state.evolution;
+  const domScore = Math.round(ev[ev.dominant] || 0);
+  const isBoss   = state.round % state.shopEvery === 0;
+  const weaponList = state.ownedWeapons?.map(w => w.name).join(', ') || '无';
+  const userMsg = `Round: ${state.round}\nChapter: ${ch.name}\nClass: ${state.classId} — ${cls.name}\nEvolution build: ${ev.dominant} at ${domScore}% corruption\nWeapons: ${weaponList}\nBoss round: ${isBoss}\nBegin the scene.`;
+
+  // Show overlay, pause game
+  state.running = false;
+  paused = true;
+  const overlay  = document.getElementById('narratorOverlay');
+  const prose    = document.getElementById('narratorProse');
+  const choicesEl= document.getElementById('narratorChoices');
+  const conEl    = document.getElementById('narratorConsequence');
+  const statusEl = document.getElementById('narratorStatus');
+  const toastEl  = document.getElementById('narratorModToast');
+  prose.innerHTML = '';
+  choicesEl.innerHTML = ''; choicesEl.style.display = 'none';
+  conEl.innerHTML = ''; conEl.style.display = 'none';
+  toastEl.style.display = 'none';
+  statusEl.textContent = '叙事者正在书写命运…';
+  document.getElementById('narratorBadge').textContent   = `第 ${state.round} 回合`;
+  document.getElementById('narratorChapter').textContent = ch.name;
+  overlay.style.display = 'flex';
+
+  // Skip button
+  const skipBtn = document.getElementById('narratorSkip');
+  skipBtn.onclick = () => {
+    _narratorSkipped = true;
+    overlay.style.display = 'none';
+    _narratorActive = false;
+    onDone();
+  };
+
+  // Turn 1: get narration + choices
+  const messages = [{ role: 'user', content: userMsg }];
+  let firstResponse = '';
+  try {
+    firstResponse = await _narratorAPICall(messages);
+  } catch(e) {
+    overlay.style.display = 'none';
+    _narratorActive = false;
+    onDone();
+    return;
+  }
+  if (_narratorSkipped) return;
+
+  // Parse
+  const choicesTag  = firstResponse.match(/<choices>([\s\S]*?)<\/choices>/);
+  const narratorText= choicesTag
+    ? firstResponse.slice(0, firstResponse.indexOf('<choices>')).trim()
+    : firstResponse.trim();
+  let parsedChoices = [];
+  if (choicesTag) {
+    try { parsedChoices = JSON.parse(choicesTag[1].trim()); } catch(e) {}
+  }
+
+  // Typewriter narration
+  statusEl.textContent = '';
+  await typewriterReveal(prose, narratorText, 18);
+  if (_narratorSkipped) return;
+
+  if (!parsedChoices.length) {
+    // No choices: brief pause then start
+    await new Promise(r => setTimeout(r, 2200));
+    if (_narratorSkipped) return;
+    overlay.style.display = 'none';
+    _narratorActive = false;
+    onDone();
+    return;
+  }
+
+  // Show choice buttons
+  statusEl.textContent = '做出你的选择——';
+  choicesEl.style.display = 'flex';
+  parsedChoices.forEach(ch => {
+    const btn = document.createElement('button');
+    btn.className = `narr-choice-btn tone-${ch.tone}`;
+    btn.innerHTML = `<span class="narr-choice-id">${ch.id}</span><span>${ch.label}</span>`;
+    btn.onclick = async () => {
+      if (_narratorSkipped) return;
+      choicesEl.querySelectorAll('button').forEach(b => b.disabled = true);
+      statusEl.textContent = '命运正在回应…';
+
+      // Turn 2: consequence + modifier
+      messages.push({ role: 'assistant', content: firstResponse });
+      messages.push({ role: 'user', content: ch.id });
+      let secondResponse = '';
+      try {
+        secondResponse = await _narratorAPICall(messages);
+      } catch(e) { secondResponse = ''; }
+      if (_narratorSkipped) return;
+
+      // Parse modifier
+      const modMatch = secondResponse.match(/<modifier\s+type="(\w+)"\s+value="([^"]*)"\s+description="([^"]*)"\s*\/>/);
+      if (modMatch) applyNarratorModifier(modMatch[1], modMatch[2], modMatch[3]);
+
+      // Parse consequence text (strip XML tags)
+      const conText = secondResponse
+        .replace(/<modifier[^>]*\/>/g, '')
+        .replace(/<begin_combat\/>/g, '')
+        .trim();
+
+      choicesEl.style.display = 'none';
+      conEl.style.display     = 'block';
+      statusEl.textContent    = '';
+      await typewriterReveal(conEl, conText, 22);
+      if (_narratorSkipped) return;
+
+      // Wait then start combat
+      await new Promise(r => setTimeout(r, 1800));
+      if (_narratorSkipped) return;
+      overlay.style.display = 'none';
+      _narratorActive = false;
+      onDone();
+    };
+    choicesEl.appendChild(btn);
+  });
+}
+
 const ui = {
   startModal:   document.getElementById("startModal"),
   choiceModal:  document.getElementById("choiceModal"),
@@ -375,6 +638,7 @@ function baseState(classId = selectedClass) {
     time:0, roundTime:0, roundDuration:35, roundTransition:false,
     round:1, shopEvery:5, equipmentLimit:6,
     inShop:false,
+    narratorMod: null,
     wave:1, chapter:0,
     nextSpawn:0, spawnRate:1.15,
     bossSpawned:false,
@@ -4369,6 +4633,8 @@ function update(dt) {
 
 function hasBlockingOverlay() {
   return Boolean(
+    // Narrator scene is always blocking
+    _narratorActive ||
     // Dialogue only blocks if it was opened with pauseGame:true
     (dlgEl?.classList.contains('show') && _dlgContext?.pauseGame) ||
     document.getElementById("mainMenu")?.classList.contains("show") ||
@@ -4903,22 +5169,29 @@ function startNextRound() {
     return;
   }
 
+  // Reset last round's narrator modifier
+  state.narratorMod = null;
+
   const isBossRound = state.round % state.shopEvery === 0;
-  if (isBossRound) {
-    // Show pre-boss pact offer, then resume
-    state.running = false;
-    paused = true;
-    window.setTimeout(() => openPreBossOffer(() => {
+  hide(ui.shopModal);
+
+  // Narrator scene → then boss pact (if needed) → then combat
+  window.setTimeout(() => runNarratorScene(() => {
+    if (isBossRound) {
+      // Show pre-boss pact offer after narrator, then resume
+      state.running = false;
+      paused = true;
+      window.setTimeout(() => openPreBossOffer(() => {
+        state.running = true;
+        paused = false;
+        last = performance.now();
+      }), 300);
+    } else {
       state.running = true;
       paused = false;
       last = performance.now();
-    }), 400);
-  } else {
-    state.running = true;
-    paused = false;
-    last = performance.now();
-  }
-  hide(ui.shopModal);
+    }
+  }), 200);
 }
 
 function updateEnemies(dt) {
@@ -5157,8 +5430,9 @@ function applyBulletHit(bullet, enemy) {
   const p = state.player;
   const ev = state.evolution;
 
+  // Narrator aggressive modifier: +15% damage this round
+  let dmg = bullet.damage * (state.narratorMod?.damageMul || 1);
   // Abyss Ritual: +40% damage to bullets inside field
-  let dmg = bullet.damage;
   if (state.abyssRitual?.active && distance(p, enemy) < 200) {
     dmg *= 1.40;
     // Small ritual spark on hit
