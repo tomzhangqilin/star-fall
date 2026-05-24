@@ -62,53 +62,159 @@ TONE RULES:
 - Chinese chapter names and NPC names encouraged; dialogue can be bilingual
 - Vary NPC archetypes each round — never repeat the same character type`;
 
-// ─── Narrator Fallback Scenes — 拯救世界主线 ───────────────
+// ─── Narrator Scenes — 拯救世界主线（无限关卡版）──────────
 // 背景：三年前魔兽王撕裂天空，开启星裂之门，魔兽大军淹没星陨大陆。
-// 所有人类城市沦陷，幸存者要么被奴役、要么躲在地下苟延残喘。
-// 玩家是极少数尚未被控制的觉醒者，唯一的目标：摧毁魔兽王的控制水晶，
-// 解放全人类。
-const NARRATOR_FALLBACKS = [
-  { // 0: 废都北境 — 刚逃出奴役营
-    prose: '废都北境的天空常年是暗红色的——那是三年前星裂之门留下的伤疤，至今未合。你刚从一处奴役营逃出，手腕上的铁环印记还在发烫。\n\n街道上有被魔兽控制的人类士兵，眼神空洞，机械地巡逻。偶尔其中一个停下来，像是感知到了什么异常。\n\n残存抵抗军·林破从废墟缺口探出头。\n『这里』\n\n『快——他们的感知器每隔两分钟扫描一次。』\n『我知道一条路能绕过前哨站，但要穿过沼地……那里有魔兽猎手在守着。』',
+// 所有人类城市沦陷。玩家是极少数尚未被控制的觉醒者，目标：
+// 摧毁魔兽王的控制水晶，解放全人类。
+//
+// NARRATOR_FALLBACKS_REGULAR — 普通回合（按顺序循环，每轮不重复）
+// NARRATOR_FALLBACKS_BOSS    — Boss回合专属（按Boss次数循环）
+
+const NARRATOR_FALLBACKS_REGULAR = [
+  { // 0 废都北境 R1
+    prose: '废都北境的天空常年是暗红色的——那是三年前星裂之门留下的伤疤。你刚从奴役营逃出，手腕上的铁环印记还在发烫。街道上空洞眼神的人类士兵机械地巡逻。\n\n残存抵抗军·林破从废墟缺口探出头，压低声音。\n『快——感知器每隔两分钟扫描一次。』\n『我知道一条路能绕过前哨站，但要穿过沼地……那里有魔兽猎手。』',
     choices: [
-      { id:'A', label:'听他的，绕道沼地', tone:'cautious' },
-      { id:'B', label:'问他抵抗军的下落', tone:'curious' },
+      { id:'A', label:'绕道沼地，避开巡逻', tone:'cautious' },
+      { id:'B', label:'问他抵抗军在哪里', tone:'curious' },
       { id:'C', label:'正面突破，趁现在', tone:'aggressive' }
     ]
   },
-  { // 1: 奴役沼地 — 抵抗军营地
-    prose: '奴役沼地的磷火在夜间指引着幸存者——也指引着猎手。你穿过了两道魔兽岗哨，靴子沾满了腐臭的泥。\n\n地下营地里挤着四十七个人，是这片区域最后的自由意志。他们的眼神里有的是恐惧，有的是愤怒，也有的是麻木。\n\n抵抗军军医·沈白坐在简陋的手术台旁，手里握着一张用血画成的地图。\n『你来得正好，或者来得太晚——我说不准。』\n\n『魔兽王的控制水晶在裂空深渊最深处。但通往那里的路上，有三个魔将守着关卡。你必须一个个打穿。』\n『我手里有水晶的弱点情报……但情报是有价的。』',
+  { // 1 奴役沼地 R2
+    prose: '奴役沼地的磷火在夜间指引幸存者，也指引着猎手。地下营地里挤着四十七个人，是这片区域最后的自由意志。\n\n抵抗军军医·沈白手里握着一张用血画成的地图。\n『魔兽王的控制水晶在裂空深渊最深处。通路上有三个魔将守着关卡。』\n『我有水晶的弱点情报……但情报是有价的。』',
     choices: [
       { id:'A', label:'拿出粮食，换取情报', tone:'merciful' },
       { id:'B', label:'仔细研究那张血地图', tone:'curious' },
-      { id:'C', label:'告诉他自己已有足够实力', tone:'aggressive' }
+      { id:'C', label:'我有足够的实力，不需要情报', tone:'aggressive' }
     ]
   },
-  { // 2: 魔塔遗址 — 脱控的前人类卫兵
-    prose: '魔塔遗址的核心曾是人类最高学府，现在是魔兽王的意识中转站。塔体每隔十二秒发出一次脉冲，让方圆十里内所有被控制的人类保持服从状态。\n\n你摧毁了脉冲天线，周围的士兵像断线的玩具一样颓然倒地。但其中一个站起来了。\n\n脱控卫兵·张硬——眼神里混浊与清醒在交替闪烁。\n『我……能看见你了。是真正地看见。』\n\n『控制信号断了，但不会超过十五分钟……我失控的时间里做了很多事，我记得……』\n『前面的守卫比我重度控制，他们不会恢复清醒。你只有一个选择。』',
+  { // 2 魔塔遗址 R3
+    prose: '魔塔的核心曾是人类最高学府，现在是魔兽王的意识中转站。塔体每隔十二秒发出脉冲，让方圆十里的人类保持服从。你摧毁了天线——周围士兵像断线玩具颓然倒地，但其中一个站了起来。\n\n脱控卫兵·张硬，眼神里混浊与清醒交替闪烁。\n『控制信号断了，但不会超过十五分钟……我失控的时间里做了很多事。』\n『前面的守卫比我重度控制，他们不会恢复清醒。』',
     choices: [
-      { id:'A', label:'让他留下，继续前进', tone:'aggressive' },
+      { id:'A', label:'帮他想办法永久脱控', tone:'merciful' },
       { id:'B', label:'问他被控制时的记忆', tone:'curious' },
-      { id:'C', label:'帮他想办法永久脱控', tone:'merciful' }
+      { id:'C', label:'让他留下，继续前进', tone:'aggressive' }
     ]
   },
-  { // 3: Boss前 — 魔将守卫
-    prose: '魔将要塞的门在你面前轰然作响——不是开启，是某种巨大的存在在里面移动时引发的震动。空气中弥漫着硫磺和铁锈，还有某种更深层的东西，像是恐惧本身在气态化。\n\n古战场幽魂·无名将领，铠甲腐烂成了他身体的一部分，从地面缓缓升起，眼眶发出黯淡的光。\n『又一个来死的……还是来拯救的？』\n\n『我在这里等了三百年，见过无数个跟你一样的人。他们都败了，我记住了他们的错误。』\n『魔将的左侧有一道裂缝——那是它唯一的弱点，也是它最强的陷阱。』',
+  { // 3 被控村庄 R4
+    prose: '整个村庄的人以完全一致的步伐移动。三天前，控制波覆盖了这里。只有一个孩子躲在枯井下面——太小，信号没有效果。\n\n孩子·无名，攥着一块破布，眼睛里全是困惑而不是恐惧。\n『大家都不理我了。他们看着我，但不是真的看我……』\n『有个奇怪的叔叔三天前给了我一个东西，让我交给第一个眼睛里还有光的人。』',
     choices: [
-      { id:'A', label:'正面强攻，以命搏命', tone:'aggressive' },
-      { id:'B', label:'向他学习魔将的战法', tone:'curious' },
-      { id:'C', label:'闭目沉气，让恐惧沉淀', tone:'cautious' }
+      { id:'A', label:'接过她说的东西', tone:'curious' },
+      { id:'B', label:'先把她带出危险区域', tone:'merciful' },
+      { id:'C', label:'用村庄引开魔兽，她跟你走', tone:'aggressive' }
     ]
   },
-  { // 4: 裂空深渊 — 深入腹地的代价
-    prose: '你已经走到了没有人类的地方。裂空深渊的岩壁刻满了魔纹，有些图案你意识到自己能看懂——不是学的，是身体里某种东西在共鸣。\n\n你的伤口愈合时有微弱的黑光，你的眼睛在黑暗中发光……你正在变成某种人类以外的存在。\n\n旅行者·残影——一个看起来像你三年前的人，坐在岩石上，眼神里有你认不出来的东西。\n『我是先你一步到这里的人。』\n\n『控制水晶就在前面，但打碎它会怎样……我没有勇气去试。你呢？』\n『还是说，你已经不在乎了？』',
+  { // 4 地下秘道 R5
+    prose: '抵抗军花了两年挖通这条地下秘道，连接废都三个区。隧道里贴满了失踪者的照片——有的已经褪色，有的还是新的。\n\n受伤情报员·老赵靠在岩壁上，胸口的布已经湿透了。\n『坐标……我把坐标背在脑子里，但我快撑不住了。』\n『前面三条岔路，只有一条通向目标，另两条已经被封死了，你得自己判断。』',
     choices: [
-      { id:'A', label:'我为所有人而战，不只是自己', tone:'merciful' },
-      { id:'B', label:'告诉我水晶的结构', tone:'curious' },
-      { id:'C', label:'什么代价我都接受', tone:'aggressive' }
+      { id:'A', label:'先处理他的伤势', tone:'merciful' },
+      { id:'B', label:'让他把坐标告诉自己', tone:'curious' },
+      { id:'C', label:'背起他一起走', tone:'aggressive' }
+    ]
+  },
+  { // 5 符文古城 R6
+    prose: '这座城因为八百年前的符文城墙而幸存——魔兽能量无法穿透古法。但城墙在三年的高强度对抗后已经出现了裂缝，而城内的粮食还有三天。\n\n最后的符文守护者·苍老头，手指上的符文已经烧成了疤。\n『我能强化你……但方法需要借用城墙的符文能量，它会消耗得更快。』\n『这城里还有三百六十一个人。』',
+    choices: [
+      { id:'A', label:'拒绝，不能拿这里的人冒险', tone:'cautious' },
+      { id:'B', label:'问他符文能量的具体原理', tone:'curious' },
+      { id:'C', label:'接受，前方需要这份力量', tone:'aggressive' }
+    ]
+  },
+  { // 6 人类叛徒 R7
+    prose: '你抓住了一个刚向魔兽发出信号的男人。他举报了十一个地下据点，每次换来的不过是家人多活一天的承诺。\n\n叛徒·周明，颤抖着双手，眼神里有太多东西混在一起。\n『你不理解……他们保证只要我配合，我的孩子就安全。』\n『我在你左脚靴子里留了一个线索——我故意留的，第一天开始就在等一个来拯救的人。』',
+    choices: [
+      { id:'A', label:'让他活着，带走线索', tone:'merciful' },
+      { id:'B', label:'审问他所有他知道的信息', tone:'curious' },
+      { id:'C', label:'没有时间，直接处决', tone:'aggressive' }
+    ]
+  },
+  { // 7 古战场幽地 R8
+    prose: '这片地方三百年前发生过人类与魔兽的第一场大战。那场战争人类赢了，但没有人知道用了什么代价。战场上的幽魂还在重复最后一刻的厮杀，对你视而不见——除了一个。\n\n幽魂将领·无名，铁甲已成灰烬。\n『三百年了，我们还在这里打同一场仗。』\n『你的目的我知道。水晶只能被人类的意志之力打碎，魔法和武力只会让它重生更快。』',
+    choices: [
+      { id:'A', label:'问他如何凝聚"人类意志"', tone:'curious' },
+      { id:'B', label:'为这些战士举行安魂仪式', tone:'merciful' },
+      { id:'C', label:'我自己会找到方法', tone:'aggressive' }
+    ]
+  },
+  { // 8 魔兽繁殖地 R9
+    prose: '绵延数里的魔兽孵化地——每天两千个新生魔兽从这里奔向人类聚居地。三个月前抵抗军有机会炸掉它，但什么原因失败了，没人提。\n\n独自存活的侦察员·小飞，把这片地图默写了三百遍。\n『现在只有你在。』\n『正面摧毁需要穿过核心区，但那里……是魔兽最密集的地方。绕过去，下次机会不知道还有没有。』',
+    choices: [
+      { id:'A', label:'不管代价，今天摧毁它', tone:'aggressive' },
+      { id:'B', label:'问他三个月前发生了什么', tone:'curious' },
+      { id:'C', label:'绕过去，保存实力', tone:'cautious' }
+    ]
+  },
+  { // 9 裂空深渊入口 R10
+    prose: '你到了没有人类的地方。裂空深渊的岩壁刻满魔纹——有些你意识到自己能看懂，不是学的，是身体里某种东西在共鸣。伤口愈合时有微弱的黑光，你的眼睛在黑暗中发光。\n\n你自己的影子在身后停住了，然后转过身对你说话。\n『你还记得出发时那个具体的人吗？还是只剩下一个模糊的"人类"？』',
+    choices: [
+      { id:'A', label:'我记得每一张脸', tone:'merciful' },
+      { id:'B', label:'告诉我进入深渊的最佳路径', tone:'curious' },
+      { id:'C', label:'不管我变成什么，继续走', tone:'aggressive' }
+    ]
+  },
+  { // 10 时间裂缝 R11
+    prose: '深渊里时间开始错乱——你遇到了自己。不是镜像，是另一个时间线里走到这里然后失败的你，留在这里等你。\n\n未来的你，眼神里有你从未有过的疲倦。\n『我知道你会来，因为我来过。我失败了。』\n『不是力量不够——是最后一刻我犹豫了。我看见了控制水晶里被困住的灵魂……它们都是人类。』',
+    choices: [
+      { id:'A', label:'你在哪里犹豫了', tone:'curious' },
+      { id:'B', label:'我会做出不同的选择', tone:'aggressive' },
+      { id:'C', label:'抱了一下那个自己', tone:'merciful' }
+    ]
+  },
+  { // 11 魔兽王侍从 R12+
+    prose: '魔兽王的侍从站在你面前，没有攻击，只是看着你。它已经在这里等了三年，等一个真正意义上来拯救而不是来复仇的人。\n\n侍从·无声者，声音像是从水底传来。\n『控制水晶打碎以后，所有被奴役的人会同时恢复意识。三年的记忆全部涌回来。』\n『你有没有想过，那对他们来说，是解脱……还是另一种折磨？』',
+    choices: [
+      { id:'A', label:'他们有权利选择自己的痛苦', tone:'merciful' },
+      { id:'B', label:'问他水晶打碎的具体后果', tone:'curious' },
+      { id:'C', label:'这不是我该决定的，打就完了', tone:'aggressive' }
     ]
   }
 ];
+
+// Boss 回合专属场景（按 Boss 次数循环）
+const NARRATOR_FALLBACKS_BOSS = [
+  { // Boss 1: 铁链将军 — 奴役营总指挥
+    prose: '你感觉到它在移动——不是脚步，是铁链拖地的声音，每一下都在撞击你的骨髓。铁链将军，魔兽王的第一魔将，用人类的枷锁武装自己，把奴役变成了一种美学。\n\n空中漂浮的古战场幽魂·无名，看着前方平静地说。\n『铁链将军从未被人击败过。不是因为它强，是因为没有人有勇气直视它身上的那些锁链——每一条都曾属于一个人类。』\n『看见它，然后超过它。』',
+    choices: [
+      { id:'A', label:'我会砍断每一条铁链', tone:'aggressive' },
+      { id:'B', label:'问幽魂它有没有弱点', tone:'curious' },
+      { id:'C', label:'冷静下来，找到节奏', tone:'cautious' }
+    ]
+  },
+  { // Boss 2: 脉冲主教 — 意识控制者
+    prose: '脉冲主教从不亲自出现在战场——它一直在某处发信号，让成千上万的人类为它战斗、为它死去。今天你逼它现身了。\n\n在你身后，抵抗军军医·沈白的声音从耳机里传来，带着杂音。\n『它的核心脉冲发射器在胸腔正中。但靠近它的时候你会感到意识模糊……它会试图控制你。』\n『你是我见过唯一对脉冲免疫的人。不要浪费这个优势。』',
+    choices: [
+      { id:'A', label:'直冲核心，一击必杀', tone:'aggressive' },
+      { id:'B', label:'先观察它的脉冲频率', tone:'curious' },
+      { id:'C', label:'稳住，等意识完全清醒再出手', tone:'cautious' }
+    ]
+  },
+  { // Boss 3: 虚空猎手 — 抵抗军杀手
+    prose: '虚空猎手杀死了四十三名抵抗军指挥官，每次都是在他们以为安全的时候。它能感知到自由意志的气息——在这个大陆上，自由意志已经稀有到足以被追踪。\n\n抵抗军幸存者·林破的声音，带着压抑的愤怒。\n『那些是我的同伴。』\n『我帮你绕进它的盲区，你来结束这一切。别让我白冒这个险。』',
+    choices: [
+      { id:'A', label:'让林破引路，你打最后一击', tone:'merciful' },
+      { id:'B', label:'先搞清楚猎手的感知范围', tone:'curious' },
+      { id:'C', label:'不需要配合，正面干', tone:'aggressive' }
+    ]
+  },
+  { // Boss 4: 黑曜武将 — 被转化的人类英雄
+    prose: '黑曜武将在三年前是人类最后的将军——覆灭的那场战役之后，他没有死，而是被魔兽王转化了。现在他用曾经保护人类的方式来消灭人类。\n\n时间裂缝里的未来你，轻声说。\n『他记得自己是谁。我见过他在战斗间隙停下来……他在看一样东西，每次都是同一个方向。』\n『也许有人比打倒他更重要。』',
+    choices: [
+      { id:'A', label:'试图唤回他的人类记忆', tone:'merciful' },
+      { id:'B', label:'观察他看的是什么方向', tone:'curious' },
+      { id:'C', label:'没有时间，他必须被消灭', tone:'aggressive' }
+    ]
+  },
+  { // Boss 5: 星裂守卫 — 魔兽王的终极门卫（循环后续）
+    prose: '越深入，魔兽越不像兽——它们开始有仪式，有秩序，有某种扭曲的美感。眼前这个守卫已经存在了比魔兽王更长的时间，它不是被命令站在这里，它是选择的。\n\n你影子里的自己，静静地说。\n『它在守护的不是魔兽王……是星裂之门本身。』\n『有些东西打开了就很难再关上。包括你自己心里的某道门。』',
+    choices: [
+      { id:'A', label:'打开就打开，我接受', tone:'aggressive' },
+      { id:'B', label:'问它为何选择守在这里', tone:'curious' },
+      { id:'C', label:'先确认自己还是自己', tone:'cautious' }
+    ]
+  }
+];
+
+// Alias for legacy references (boss scenes only, index 3 used historically)
+const NARRATOR_FALLBACKS = NARRATOR_FALLBACKS_REGULAR;
 
 const NARRATOR_FALLBACK_CONSEQUENCES = {
   aggressive: '你把恐惧压进肾上腺素里，肌肉绷紧，步伐加快——这片被魔兽踩碎的大地上，愤怒是最后一种纯粹的能量。\n\n没有时间思考。只有前进，和前进之后等你的东西。',
@@ -263,8 +369,17 @@ function runNarratorScene(onDone) {
   const userMsg   = `Round: ${state.round}\nChapter: ${chData.name}\nClass: ${state.classId} — ${cls.name}\nEvolution: ${ev.dominant} at ${domScore}%\nWeapons: ${weaponList}\nBoss round: ${isBoss}\nBegin the scene.`;
 
   // ── Pick fallback scene ─────────────────────────────────
-  const fbIdx  = isBoss ? 3 : ((state.round - 2) % NARRATOR_FALLBACKS.length);
-  const fb     = NARRATOR_FALLBACKS[Math.max(0, fbIdx)] || NARRATOR_FALLBACKS[0];
+  // Boss rounds use dedicated boss scenes (cycle through them independently)
+  // Regular rounds cycle through the full story arc, then loop from start
+  let fb;
+  if (isBoss) {
+    const bossNum = Math.floor(state.round / state.shopEvery) - 1; // 0-based boss count
+    const bIdx    = bossNum % NARRATOR_FALLBACKS_BOSS.length;
+    fb = NARRATOR_FALLBACKS_BOSS[bIdx] || NARRATOR_FALLBACKS_BOSS[0];
+  } else {
+    const rIdx = (state.round - 1) % NARRATOR_FALLBACKS_REGULAR.length;
+    fb = NARRATOR_FALLBACKS_REGULAR[rIdx] || NARRATOR_FALLBACKS_REGULAR[0];
+  }
 
   // ── Show overlay ────────────────────────────────────────
   state.running = false;
