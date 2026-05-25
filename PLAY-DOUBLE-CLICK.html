@@ -6111,6 +6111,16 @@ function startGame() {
   hide(ui.routeModal);
   document.getElementById("deathCard")?.classList.remove("show");
   updateEvolveBar();
+
+  // Show the DnD-style narrator before the first combat round too.
+  // Later rounds already enter through startNextRound().
+  state.running = false;
+  paused = true;
+  window.setTimeout(() => runNarratorScene(() => {
+    state.running = true;
+    paused = false;
+    last = performance.now();
+  }), 200);
 }
 
 // ── Return to main menu after death / restart ───────────────
