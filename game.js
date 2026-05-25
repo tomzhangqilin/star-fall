@@ -1351,9 +1351,9 @@ const SPRITE_DEFS = {
     frames: { Idle:6, Walk:6, Attack1:6 },
     files:  { Idle:'wizard-sheet', Walk:'wizard-sheet', Attack1:'wizard-sheet' }
   },
-  ella: {   // 艾拉 — partner companion (256x32 strips, 8 frames each)
+  ella: {   // 艾拉 — partner companion (32px frames, variable-length strips)
     base:   'sprites/ella',
-    frames: { Idle:8, Walk:8, Attack1:8, Hurt:8 },
+    frames: { Idle:2, Walk:8, Attack1:8, Hurt:6 },
     files:  { Idle:'idle', Walk:'walk', Attack1:'attack', Hurt:'hurt' }
   },
   // ── Enemies ─────────────────────────────────────────────
